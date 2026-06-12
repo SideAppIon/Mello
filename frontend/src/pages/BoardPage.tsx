@@ -41,31 +41,33 @@ export default function BoardPage() {
     const activeType = active.data.current?.type;
     if (activeType !== 'task') return;
 
-    const activeTask = active.data.current?.task as Task;
+    const draggedId = String(active.id);
     const overId = String(over.id);
 
     // Find target column
     let toColumnId = overId;
     if (!board.columns.find(c => c.id === overId)) {
-      // overId is a task id, find its column
       const col = board.columns.find(c => c.tasks.some(t => t.id === overId));
       if (col) toColumnId = col.id;
     }
 
-    if (activeTask.column_id === toColumnId) return;
+    // Find task's CURRENT column from board state (not stale dnd-kit data)
+    const currentCol = board.columns.find(c => c.tasks.some(t => t.id === draggedId));
+    if (!currentCol || currentCol.id === toColumnId) return;
 
-    // Optimistic column change for visual feedback
+    const draggedTask = currentCol.tasks.find(t => t.id === draggedId)!;
+
+    // Optimistic cross-column move without duplicates
     const newColumns = board.columns.map(col => {
-      if (col.id === activeTask.column_id) {
-        return { ...col, tasks: col.tasks.filter(t => t.id !== activeTask.id) };
+      if (col.id === currentCol.id) {
+        return { ...col, tasks: col.tasks.filter(t => t.id !== draggedId) };
       }
       if (col.id === toColumnId) {
-        return { ...col, tasks: [...col.tasks, { ...activeTask, column_id: toColumnId }] };
+        return { ...col, tasks: [...col.tasks, { ...draggedTask, column_id: toColumnId }] };
       }
       return col;
     });
     useBoardStore.setState({ board: { ...board, columns: newColumns } });
-    setActiveTask(prev => prev ? { ...prev, column_id: toColumnId } : prev);
   };
 
   const handleDragEnd = (e: DragEndEvent) => {
@@ -87,8 +89,13 @@ export default function BoardPage() {
     }
 
     if (activeType === 'task') {
-      const task = active.data.current?.task as Task;
+      const draggedId = String(active.id);
       const overId = String(over.id);
+
+      // Find task's CURRENT column from board state (handleDragOver may have already moved it)
+      const fromCol = board.columns.find(c => c.tasks.some(t => t.id === draggedId));
+      if (!fromCol) return;
+      const task = fromCol.tasks.find(t => t.id === draggedId)!;
 
       let toColumnId = overId;
       let toIndex = 0;
@@ -105,7 +112,7 @@ export default function BoardPage() {
         }
       }
 
-      moveTask(task.id, task.column_id, toColumnId, toIndex);
+      moveTask(task.id, fromCol.id, toColumnId, toIndex);
     }
   };
 
