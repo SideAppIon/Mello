@@ -1,26 +1,52 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { projectsApi, companiesApi } from '../api/client';
 import { Project, ProjectMember, ROLE_LABELS, TASK_FIELDS } from '../types';
 import Header from '../components/Header';
 import Avatar from '../components/Avatar';
 import Modal from '../components/Modal';
 
+const PROJECT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6'];
+
 export default function ProjectSettings() {
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [companyMembers, setCompanyMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'members' | 'permissions'>('members');
+  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'permissions'>('general');
   const [showAddMember, setShowAddMember] = useState(false);
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState('member');
+  const [form, setForm] = useState({ name: '', description: '', color: PROJECT_COLORS[0] });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const navigate = useNavigate();
 
   const load = async () => {
     if (!projectId) return;
     const [p, cm] = await Promise.all([projectsApi.get(projectId), companiesApi.getMembers()]);
     setProject(p);
+    setForm({ name: p.name, description: p.description || '', color: p.color || PROJECT_COLORS[0] });
     setCompanyMembers(cm);
+  };
+
+  const saveGeneral = async () => {
+    if (!projectId || !form.name.trim()) return;
+    setSaving(true);
+    try {
+      await projectsApi.update(projectId, { name: form.name.trim(), description: form.description, color: form.color });
+      await load();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteProject = async () => {
+    if (!projectId || !confirm('Удалить проект со всеми досками и задачами? Это необратимо.')) return;
+    await projectsApi.delete(projectId);
+    navigate('/');
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [projectId]);
@@ -89,16 +115,74 @@ export default function ProjectSettings() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Настройки проекта</h1>
 
         <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-100 p-1 w-fit">
-          {(['members', 'permissions'] as const).map(t => (
+          {(['general', 'members', 'permissions'] as const).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === t ? 'bg-brand-500 text-white' : 'text-gray-600 hover:text-gray-900'}`}
             >
-              {t === 'members' ? 'Участники' : 'Права доступа'}
+              {t === 'general' ? 'Общие' : t === 'members' ? 'Участники' : 'Права доступа'}
             </button>
           ))}
         </div>
+
+        {activeTab === 'general' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                <input
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Цвет</label>
+                <div className="flex gap-2">
+                  {PROJECT_COLORS.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setForm(f => ({ ...f, color: c }))}
+                      className={`w-8 h-8 rounded-xl transition-transform hover:scale-110 ${form.color === c ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={saveGeneral}
+                  disabled={saving || !form.name.trim()}
+                  className="bg-brand-500 text-white px-5 py-2 rounded-xl text-sm hover:bg-brand-600 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Сохранение...' : 'Сохранить'}
+                </button>
+                {saved && <span className="text-sm text-green-600">✓ Сохранено</span>}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-red-100 p-6">
+              <h3 className="font-semibold text-gray-900">Опасная зона</h3>
+              <p className="text-sm text-gray-500 mt-1 mb-4">Удаление проекта необратимо — будут удалены все доски, колонки и задачи.</p>
+              <button
+                onClick={deleteProject}
+                className="bg-red-50 text-red-600 px-5 py-2 rounded-xl text-sm hover:bg-red-100 transition-colors font-medium"
+              >
+                Удалить проект
+              </button>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'members' && (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">

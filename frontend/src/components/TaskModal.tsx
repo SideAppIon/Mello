@@ -49,7 +49,7 @@ function HistoryAction({ entry }: { entry: HistoryEntry }) {
 }
 
 export default function TaskModal() {
-  const { taskModal, closeTaskModal, updateTask, deleteTask, board } = useBoardStore();
+  const { taskModal, closeTaskModal, updateTask, patchTaskLocal, deleteTask, board } = useBoardStore();
   const { user } = useAuthStore();
   const task = taskModal;
 
@@ -111,14 +111,14 @@ export default function TaskModal() {
   const addTag = async () => {
     if (!newTag.name.trim()) return;
     const tag = await tasksApi.addTag(task.id, newTag);
-    await updateTask(task.id, { tags: [...task.tags, tag] });
+    patchTaskLocal(task.id, { tags: [...task.tags, tag] });
     setNewTag({ name: '', color: TAG_COLORS[0] });
     setAddingTag(false);
   };
 
   const removeTag = async (tagId: string) => {
     await tasksApi.removeTag(task.id, tagId);
-    await updateTask(task.id, { tags: task.tags.filter(t => t.id !== tagId) });
+    patchTaskLocal(task.id, { tags: task.tags.filter(t => t.id !== tagId) });
   };
 
   const members = board ? (
@@ -134,7 +134,7 @@ export default function TaskModal() {
   };
 
   return (
-    <Modal onClose={closeTaskModal} size="xl">
+    <Modal onClose={closeTaskModal} size="2xl">
       <div className="flex h-full">
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -317,7 +317,7 @@ export default function TaskModal() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-60 border-l border-gray-100 flex-shrink-0 overflow-y-auto px-4 py-5 space-y-5">
+        <div className="w-72 border-l border-gray-100 flex-shrink-0 overflow-y-auto px-4 py-5 space-y-5">
           {/* Priority */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Приоритет</label>
@@ -385,7 +385,7 @@ export default function TaskModal() {
                     <button
                       onClick={async () => {
                         await tasksApi.removeAssignee(task.id, a.id);
-                        await updateTask(task.id, { assignees: task.assignees.filter(x => x.id !== a.id) });
+                        patchTaskLocal(task.id, { assignees: task.assignees.filter(x => x.id !== a.id) });
                       }}
                       className="text-gray-300 hover:text-red-400 text-sm"
                     >
@@ -406,7 +406,7 @@ export default function TaskModal() {
 }
 
 function AssigneeSelector({ task }: { task: Task }) {
-  const { updateTask, board } = useBoardStore();
+  const { patchTaskLocal, board } = useBoardStore();
   const [open, setOpen] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
 
@@ -422,12 +422,12 @@ function AssigneeSelector({ task }: { task: Task }) {
   const toggle = async (userId: string) => {
     if (assignedIds.has(userId)) {
       await tasksApi.removeAssignee(task.id, userId);
-      await updateTask(task.id, { assignees: task.assignees.filter(a => a.id !== userId) });
+      patchTaskLocal(task.id, { assignees: task.assignees.filter(a => a.id !== userId) });
     } else {
       await tasksApi.addAssignee(task.id, userId);
       const member = members.find(m => m.id === userId);
       if (member) {
-        await updateTask(task.id, { assignees: [...task.assignees, { id: member.id, full_name: member.full_name, avatar_color: member.avatar_color }] });
+        patchTaskLocal(task.id, { assignees: [...task.assignees, { id: member.id, full_name: member.full_name, avatar_color: member.avatar_color }] });
       }
     }
   };

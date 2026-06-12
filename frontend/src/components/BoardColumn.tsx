@@ -47,6 +47,8 @@ function AddTaskForm({ columnId, onDone }: { columnId: string; onDone: () => voi
   );
 }
 
+const COLUMN_COLORS = ['#94a3b8', '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6'];
+
 function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: string; myRole: string }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(column.name);
@@ -95,16 +97,29 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
             </svg>
           </button>
           {menu && (
-            <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-36 z-10">
+            <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-44 z-10">
               <button
                 onClick={() => { setEditing(true); setMenu(false); }}
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50"
               >
                 Переименовать
               </button>
+              <div className="px-3 py-1.5">
+                <div className="text-xs text-gray-400 mb-1.5">Цвет</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {COLUMN_COLORS.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => { updateColumn(boardId, column.id, { color: c }); }}
+                      className={`w-5 h-5 rounded-full transition-transform hover:scale-110 ${column.color === c ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={() => { if (confirm('Удалить столбец и все задачи?')) deleteColumn(boardId, column.id); setMenu(false); }}
-                className="w-full text-left px-3 py-1.5 text-sm text-red-500 hover:bg-red-50"
+                className="w-full text-left px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 border-t border-gray-100 mt-1"
               >
                 Удалить
               </button>

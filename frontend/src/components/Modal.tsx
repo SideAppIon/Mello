@@ -3,7 +3,7 @@ import { useEffect, ReactNode } from 'react';
 interface Props {
   onClose: () => void;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   title?: string;
 }
 
@@ -12,6 +12,7 @@ const sizes = {
   md: 'max-w-md',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  '2xl': 'max-w-6xl',
 };
 
 export default function Modal({ onClose, children, size = 'md', title }: Props) {
@@ -24,7 +25,7 @@ export default function Modal({ onClose, children, size = 'md', title }: Props) 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 pb-4 animate-fade-in">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[85vh] flex flex-col animate-slide-up`}>
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} ${size === '2xl' ? 'h-[88vh]' : 'max-h-[85vh]'} flex flex-col animate-slide-up`}>
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>

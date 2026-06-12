@@ -14,6 +14,7 @@ interface BoardState {
   deleteColumn: (boardId: string, columnId: string) => Promise<void>;
   addTask: (columnId: string, data: any) => Promise<Task>;
   updateTask: (taskId: string, data: any) => Promise<void>;
+  patchTaskLocal: (taskId: string, patch: Partial<Task>) => void;
   deleteTask: (taskId: string) => Promise<void>;
   moveTask: (taskId: string, fromColumnId: string, toColumnId: string, newPosition: number) => Promise<void>;
   reorderColumns: (boardId: string, newOrder: Column[]) => Promise<void>;
@@ -87,6 +88,21 @@ export const useBoardStore = create<BoardState>((set, get) => ({
             columns: s.board.columns.map(c => ({
               ...c,
               tasks: c.tasks.map(t => t.id === taskId ? { ...t, ...updated } : t),
+            })),
+          }
+        : s.board,
+    }));
+  },
+
+  patchTaskLocal: (taskId, patch) => {
+    set((s) => ({
+      taskModal: s.taskModal?.id === taskId ? { ...s.taskModal, ...patch } : s.taskModal,
+      board: s.board
+        ? {
+            ...s.board,
+            columns: s.board.columns.map(c => ({
+              ...c,
+              tasks: c.tasks.map(t => t.id === taskId ? { ...t, ...patch } : t),
             })),
           }
         : s.board,
