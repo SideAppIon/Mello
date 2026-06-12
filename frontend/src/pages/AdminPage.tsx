@@ -15,6 +15,11 @@ export default function AdminPage() {
   const [form, setForm] = useState({ email: '', password: '', full_name: '', role: 'member' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pwUser, setPwUser] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwDone, setPwDone] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'admin') { navigate('/'); return; }
@@ -47,6 +52,29 @@ export default function AdminPage() {
   const changeRole = async (userId: string, role: string) => {
     await companiesApi.updateMember(userId, { role });
     await load();
+  };
+
+  const openPassword = (m: any) => {
+    setPwUser(m);
+    setNewPassword('');
+    setPwError('');
+    setPwDone(false);
+  };
+
+  const savePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwUser) return;
+    setPwError('');
+    setPwSaving(true);
+    try {
+      await companiesApi.setMemberPassword(pwUser.id, newPassword);
+      setPwDone(true);
+      setTimeout(() => setPwUser(null), 1200);
+    } catch (err: any) {
+      setPwError(err.response?.data?.error || 'Ошибка');
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   return (
@@ -107,6 +135,12 @@ export default function AdminPage() {
                       <option value="member">Участник</option>
                       <option value="viewer">Наблюдатель</option>
                     </select>
+                    <button
+                      onClick={() => openPassword(m)}
+                      className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Пароль
+                    </button>
                     <button
                       onClick={() => toggleActive(m.id, m.is_active)}
                       className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
@@ -182,6 +216,37 @@ export default function AdminPage() {
               </button>
               <button type="submit" disabled={loading} className="flex-1 bg-brand-500 text-white py-2 rounded-xl text-sm hover:bg-brand-600 disabled:opacity-60 transition-colors">
                 {loading ? 'Создаём...' : 'Создать'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {pwUser && (
+        <Modal onClose={() => setPwUser(null)} title={`Новый пароль — ${pwUser.full_name}`} size="sm">
+          <form onSubmit={savePassword} className="p-6 space-y-4">
+            <p className="text-sm text-gray-500">Задайте новый пароль для <strong>{pwUser.email}</strong>. Сотрудник сможет войти с ним сразу.</p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Новый пароль</label>
+              <input
+                autoFocus
+                type="text"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                placeholder="Минимум 6 символов"
+              />
+            </div>
+            {pwError && <div className="text-red-500 text-sm">{pwError}</div>}
+            {pwDone && <div className="text-green-600 text-sm">✓ Пароль изменён</div>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPwUser(null)} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50">
+                Отмена
+              </button>
+              <button type="submit" disabled={pwSaving || newPassword.length < 6} className="flex-1 bg-brand-500 text-white py-2 rounded-xl text-sm hover:bg-brand-600 disabled:opacity-60 transition-colors">
+                {pwSaving ? 'Сохраняем...' : 'Сменить пароль'}
               </button>
             </div>
           </form>

@@ -42,6 +42,7 @@ export const companiesApi = {
   getMembers: () => api.get('/companies/members').then(r => r.data),
   createMember: (data: any) => api.post('/companies/members', data).then(r => r.data),
   updateMember: (userId: string, data: any) => api.patch(`/companies/members/${userId}`, data).then(r => r.data),
+  setMemberPassword: (userId: string, password: string) => api.patch(`/companies/members/${userId}/password`, { password }).then(r => r.data),
 };
 
 // Projects

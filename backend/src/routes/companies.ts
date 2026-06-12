@@ -114,4 +114,21 @@ router.patch('/members/:userId', authenticate, requireAdmin, async (req: AuthReq
   res.json(user);
 });
 
+// Admin sets a new password for a company member
+router.patch('/members/:userId/password', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const bcrypt = require('bcryptjs');
+  const { userId } = req.params;
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  const target = await queryOne('SELECT id FROM users WHERE id = $1 AND company_id = $2', [userId, req.user!.company_id]);
+  if (!target) return res.status(404).json({ error: 'User not found in your company' });
+
+  const password_hash = await bcrypt.hash(password, 12);
+  await queryOne('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, userId]);
+  res.json({ ok: true });
+});
+
 export default router;
