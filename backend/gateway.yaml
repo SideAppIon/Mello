@@ -1,0 +1,23 @@
+openapi: "3.0.0"
+info:
+  title: Mello API
+  version: 1.0.0
+x-yc-apigateway:
+  service_account_id: ajeqgfu8e3c07j9r8n0a
+paths:
+  /{proxy+}:
+    x-yc-apigateway-any-method:
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: d4ef0g9r60fbkiuh23cb
+        tag: $latest
+        service_account_id: ajeqgfu8e3c07j9r8n0a
+        context:
+          httpMethod: '{context.httpMethod}'
+          path: '/{proxy}'
+      parameters:
+        - name: proxy
+          in: path
+          required: false
+          schema:
+            type: string
