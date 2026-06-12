@@ -119,6 +119,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!task) return;
 
     const newColumns = board.columns.map(col => {
+      if (col.id === fromColumnId && col.id === toColumnId) {
+        // Reorder within same column
+        const tasks = col.tasks.filter(t => t.id !== taskId);
+        tasks.splice(newPosition, 0, { ...task, position: newPosition });
+        return { ...col, tasks: tasks.map((t, i) => ({ ...t, position: i })) };
+      }
       if (col.id === fromColumnId) {
         return { ...col, tasks: col.tasks.filter(t => t.id !== taskId) };
       }
