@@ -71,6 +71,15 @@ export interface Tag {
   color: string;
 }
 
+export interface Subtask {
+  id: string;
+  task_id: string;
+  title: string;
+  is_done: boolean;
+  position: number;
+  created_at: string;
+}
+
 export type Priority = 1 | 2 | 3 | 4 | 5;
 
 export interface Task {
@@ -89,6 +98,8 @@ export interface Task {
   tags: Tag[];
   assignees: Pick<User, 'id' | 'full_name' | 'avatar_color'>[];
   custom_values?: Record<string, string>;
+  hidden_custom_fields?: string[];
+  subtasks?: Subtask[];
 }
 
 export interface Column {

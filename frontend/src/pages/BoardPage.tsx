@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext, DragEndEvent, DragOverEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay, closestCorners,
@@ -14,7 +14,8 @@ import TaskCard from '../components/TaskCard';
 
 export default function BoardPage() {
   const { projectId, boardId } = useParams<{ projectId: string; boardId: string }>();
-  const { board, loading, loadBoard, addColumn, moveTask, reorderColumns, taskModal } = useBoardStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { board, loading, loadBoard, addColumn, moveTask, reorderColumns, taskModal, openTaskModal } = useBoardStore();
   const [addingColumn, setAddingColumn] = useState(false);
   const [colName, setColName] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -26,6 +27,19 @@ export default function BoardPage() {
   useEffect(() => {
     if (projectId && boardId) loadBoard(projectId, boardId);
   }, [projectId, boardId]);
+
+  // Открыть задачу из ссылки (?task=<id>) после загрузки доски
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    if (!taskId || !board) return;
+    const found = board.columns.flatMap(c => c.tasks).find(t => t.id === taskId);
+    if (found) {
+      openTaskModal(found);
+      // убираем параметр из URL, чтобы не открывалось повторно
+      searchParams.delete('task');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [board, searchParams]);
 
   const handleDragStart = (e: DragStartEvent) => {
     if (e.active.data.current?.type === 'task') {

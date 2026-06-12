@@ -38,6 +38,7 @@ async function getFullTask(taskId: string) {
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color, 'email', u.email)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
             COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
+            COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks,
             ub.full_name as created_by_name
      FROM tasks t
      LEFT JOIN task_tags tt ON tt.task_id = t.id
@@ -223,6 +224,88 @@ router.put('/:taskId/custom-values/:fieldId', authenticate, async (req: ProjectR
     );
   }
   res.json(await getFullTask(taskId));
+});
+
+// Set hidden custom fields for a task (per-task visibility)
+router.patch('/:taskId/hidden-fields', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const { hidden } = req.body as { hidden: string[] };
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  await queryOne('UPDATE tasks SET hidden_custom_fields = $1 WHERE id = $2', [JSON.stringify(Array.isArray(hidden) ? hidden : []), taskId]);
+  res.json(await getFullTask(taskId));
+});
+
+// Subtasks
+router.post('/:taskId/subtasks', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const { title } = req.body;
+  if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM subtasks WHERE task_id = $1', [taskId]);
+  const position = parseInt(maxPos?.max || '-1') + 1;
+  const subtask = await queryOne<any>(
+    'INSERT INTO subtasks (task_id, title, position) VALUES ($1, $2, $3) RETURNING *',
+    [taskId, title.trim(), position]
+  );
+  res.status(201).json(subtask);
+});
+
+router.patch('/:taskId/subtasks/:subtaskId', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId, subtaskId } = req.params;
+  const { title, is_done } = req.body;
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  const updates: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (title !== undefined) { updates.push(`title = $${i++}`); params.push(title); }
+  if (is_done !== undefined) { updates.push(`is_done = $${i++}`); params.push(is_done); }
+  if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
+  params.push(subtaskId, taskId);
+  const subtask = await queryOne<any>(
+    `UPDATE subtasks SET ${updates.join(', ')} WHERE id = $${i++} AND task_id = $${i} RETURNING *`,
+    params
+  );
+  if (!subtask) return res.status(404).json({ error: 'Subtask not found' });
+  res.json(subtask);
+});
+
+router.delete('/:taskId/subtasks/:subtaskId', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId, subtaskId } = req.params;
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  await queryOne('DELETE FROM subtasks WHERE id = $1 AND task_id = $2', [subtaskId, taskId]);
+  res.json({ ok: true });
 });
 
 // Delete task

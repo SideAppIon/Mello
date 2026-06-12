@@ -289,6 +289,22 @@ export default function ProjectSettings() {
                       })}
                     </tr>
                   ))}
+                  <tr className="bg-gray-50/50">
+                    <td className="px-6 py-3 text-sm text-gray-700 font-medium">Создание кастомных полей</td>
+                    {roles.map(role => {
+                      const canEdit = getRoleFieldPerm(role, 'custom_fields_create');
+                      return (
+                        <td key={role} className="text-center px-4 py-3">
+                          <button
+                            onClick={() => togglePerm(role, 'custom_fields_create', canEdit)}
+                            className={`w-10 h-6 rounded-full transition-colors relative ${canEdit ? 'bg-brand-500' : 'bg-gray-200'}`}
+                          >
+                            <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${canEdit ? 'translate-x-5' : 'translate-x-1'}`} />
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -326,6 +342,7 @@ export default function ProjectSettings() {
               </div>
             </div>
 
+            {(project.my_role === 'admin' || getRoleFieldPerm(project.my_role || '', 'custom_fields_create')) ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
               <h3 className="font-semibold text-gray-900">Добавить поле</h3>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -362,6 +379,9 @@ export default function ProjectSettings() {
                 Добавить поле
               </button>
             </div>
+            ) : (
+              <p className="text-sm text-gray-400">У вашей роли нет права создавать кастомные поля.</p>
+            )}
           </div>
         )}
       </main>

@@ -154,6 +154,16 @@ router.put('/:id/permissions', authenticate, requireProjectAccess, requireProjec
 
 // Custom fields (definitions)
 router.post('/:id/custom-fields', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  // Permission check: managers can be denied custom-field creation via project permissions
+  const role = req.projectMember!.role;
+  if (role !== 'admin') {
+    const perm = await queryOne<{ can_edit: boolean }>(
+      'SELECT can_edit FROM project_field_permissions WHERE project_id = $1 AND role = $2 AND field_name = $3',
+      [req.projectId, role, 'custom_fields_create']
+    );
+    if (perm && perm.can_edit === false) return res.status(403).json({ error: 'No permission to create custom fields' });
+  }
+
   const { name, field_type = 'text', options = [] } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Field name required' });
   if (!['text', 'number', 'date', 'select'].includes(field_type)) return res.status(400).json({ error: 'Invalid field type' });

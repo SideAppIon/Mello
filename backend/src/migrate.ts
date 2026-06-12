@@ -129,6 +129,19 @@ CREATE TABLE IF NOT EXISTS task_custom_values (
   PRIMARY KEY (task_id, field_id)
 );
 
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS hidden_custom_fields JSONB NOT NULL DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS subtasks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  title VARCHAR(512) NOT NULL,
+  is_done BOOLEAN NOT NULL DEFAULT FALSE,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id);
+
 CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(column_id);

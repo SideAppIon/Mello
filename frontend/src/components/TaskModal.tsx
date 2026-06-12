@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Task, Comment, HistoryEntry, PRIORITY_LABELS, ROLE_LABELS, Tag, CustomField } from '../types';
+import { Task, Comment, HistoryEntry, PRIORITY_LABELS, ROLE_LABELS, Tag, CustomField, Subtask } from '../types';
 import { tasksApi } from '../api/client';
 import { useBoardStore } from '../store/board';
 import { useAuthStore } from '../store/auth';
@@ -71,6 +71,7 @@ export default function TaskModal() {
   const [newTag, setNewTag] = useState({ name: '', color: TAG_COLORS[0] });
   const [addingTag, setAddingTag] = useState(false);
   const [savingField, setSavingField] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const myRole = board?.my_role || 'viewer';
   const canEdit = ['admin', 'manager', 'member'].includes(myRole);
@@ -142,6 +143,20 @@ export default function TaskModal() {
     await deleteTask(task.id);
   };
 
+  const copyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?task=${task.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Фолбэк для старых браузеров / без https
+      const ta = document.createElement('textarea');
+      ta.value = url; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1800);
+  };
+
   return (
     <Modal onClose={closeTaskModal} size="2xl">
       <div className="flex h-full">
@@ -171,6 +186,12 @@ export default function TaskModal() {
               {task.created_by_name && <span>· {task.created_by_name}</span>}
               <div className="flex-1" />
               <PriorityBadge priority={task.priority} size="sm" />
+              <button onClick={copyLink} title="Скопировать ссылку на задачу" className="text-gray-400 hover:text-brand-600 transition-colors p-1 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                {linkCopied && <span className="text-xs text-brand-600">Скопировано</span>}
+              </button>
               {canEdit && (
                 <button onClick={handleDelete} className="text-red-400 hover:text-red-600 transition-colors p-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,6 +291,9 @@ export default function TaskModal() {
                     )}
                   </div>
                 </div>
+
+                {/* Subtasks */}
+                <SubtasksSection task={task} canEdit={canEdit} />
               </div>
             )}
 
@@ -383,9 +407,9 @@ export default function TaskModal() {
           </div>
 
           {/* Custom fields */}
-          {board?.custom_fields?.map(field => (
-            <CustomFieldEditor key={field.id} task={task} field={field} canEdit={canEdit} />
-          ))}
+          {board?.custom_fields && board.custom_fields.length > 0 && (
+            <CustomFieldsSection task={task} fields={board.custom_fields} canEdit={canEdit} />
+          )}
 
           {/* Assignees */}
           <div>
@@ -419,7 +443,134 @@ export default function TaskModal() {
   );
 }
 
-function CustomFieldEditor({ task, field, canEdit }: { task: Task; field: CustomField; canEdit: boolean }) {
+function SubtasksSection({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { patchTaskLocal } = useBoardStore();
+  const subtasks = task.subtasks ?? [];
+  const [newTitle, setNewTitle] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const done = subtasks.filter(s => s.is_done).length;
+
+  const add = async () => {
+    if (!newTitle.trim()) return;
+    const sub: Subtask = await tasksApi.addSubtask(task.id, newTitle.trim());
+    patchTaskLocal(task.id, { subtasks: [...subtasks, sub] });
+    setNewTitle('');
+  };
+
+  const toggle = async (sub: Subtask) => {
+    patchTaskLocal(task.id, { subtasks: subtasks.map(s => s.id === sub.id ? { ...s, is_done: !s.is_done } : s) });
+    await tasksApi.updateSubtask(task.id, sub.id, { is_done: !sub.is_done });
+  };
+
+  const remove = async (subId: string) => {
+    patchTaskLocal(task.id, { subtasks: subtasks.filter(s => s.id !== subId) });
+    await tasksApi.deleteSubtask(task.id, subId);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Подзадачи</label>
+        {subtasks.length > 0 && <span className="text-xs text-gray-400">{done}/{subtasks.length}</span>}
+      </div>
+      {subtasks.length > 0 && (
+        <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-brand-500 transition-all" style={{ width: `${(done / subtasks.length) * 100}%` }} />
+        </div>
+      )}
+      <div className="mt-2 space-y-1">
+        {subtasks.map(sub => (
+          <div key={sub.id} className="flex items-center gap-2 group">
+            <button
+              onClick={() => canEdit && toggle(sub)}
+              className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${sub.is_done ? 'bg-brand-500 border-brand-500' : 'border-gray-300 hover:border-brand-400'}`}
+            >
+              {sub.is_done && (
+                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+            <span className={`flex-1 text-sm ${sub.is_done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{sub.title}</span>
+            {canEdit && (
+              <button onClick={() => remove(sub.id)} className="text-gray-300 hover:text-red-400 text-sm opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canEdit && (
+        adding ? (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              placeholder="Название подзадачи"
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape') { setAdding(false); setNewTitle(''); } }}
+              onBlur={() => { if (!newTitle.trim()) setAdding(false); }}
+            />
+            <button onClick={add} className="text-xs text-brand-600 font-medium">ОК</button>
+          </div>
+        ) : (
+          <button onClick={() => setAdding(true)} className="mt-2 text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Добавить подзадачу
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+function CustomFieldsSection({ task, fields, canEdit }: { task: Task; fields: CustomField[]; canEdit: boolean }) {
+  const { patchTaskLocal } = useBoardStore();
+  const [adding, setAdding] = useState(false);
+  const hidden = task.hidden_custom_fields ?? [];
+  const visibleFields = fields.filter(f => !hidden.includes(f.id));
+  const hiddenFields = fields.filter(f => hidden.includes(f.id));
+
+  const setHidden = async (newHidden: string[]) => {
+    patchTaskLocal(task.id, { hidden_custom_fields: newHidden });
+    await tasksApi.setHiddenFields(task.id, newHidden);
+  };
+
+  const hideField = (fieldId: string) => setHidden([...hidden, fieldId]);
+  const showField = (fieldId: string) => { setHidden(hidden.filter(id => id !== fieldId)); setAdding(false); };
+
+  return (
+    <div className="space-y-4">
+      {visibleFields.map(field => (
+        <CustomFieldEditor key={field.id} task={task} field={field} canEdit={canEdit} onHide={canEdit ? () => hideField(field.id) : undefined} />
+      ))}
+
+      {canEdit && hiddenFields.length > 0 && (
+        <div className="relative">
+          <button onClick={() => setAdding(!adding)} className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Добавить поле
+          </button>
+          {adding && (
+            <div className="absolute left-0 top-6 bg-white rounded-xl shadow-lg border border-gray-100 py-1 w-48 z-20">
+              {hiddenFields.map(f => (
+                <button key={f.id} onClick={() => showField(f.id)} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 truncate">
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomFieldEditor({ task, field, canEdit, onHide }: { task: Task; field: CustomField; canEdit: boolean; onHide?: () => void }) {
   const { patchTaskLocal } = useBoardStore();
   const current = task.custom_values?.[field.id] ?? '';
   const [value, setValue] = useState(current);
@@ -435,7 +586,12 @@ function CustomFieldEditor({ task, field, canEdit }: { task: Task; field: Custom
 
   return (
     <div>
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{field.name}</label>
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{field.name}</label>
+        {onHide && (
+          <button onClick={onHide} title="Скрыть поле в этой задаче" className="text-gray-300 hover:text-gray-500 text-sm leading-none">×</button>
+        )}
+      </div>
       {!canEdit ? (
         <p className="mt-1 text-sm text-gray-600">{current || '—'}</p>
       ) : field.field_type === 'select' ? (

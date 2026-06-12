@@ -99,4 +99,12 @@ export const tasksApi = {
   getHistory: (taskId: string) => api.get(`/tasks/${taskId}/history`).then(r => r.data),
   setCustomValue: (taskId: string, fieldId: string, value: string | null) =>
     api.put(`/tasks/${taskId}/custom-values/${fieldId}`, { value }).then(r => r.data),
+  setHiddenFields: (taskId: string, hidden: string[]) =>
+    api.patch(`/tasks/${taskId}/hidden-fields`, { hidden }).then(r => r.data),
+  addSubtask: (taskId: string, title: string) =>
+    api.post(`/tasks/${taskId}/subtasks`, { title }).then(r => r.data),
+  updateSubtask: (taskId: string, subtaskId: string, data: { title?: string; is_done?: boolean }) =>
+    api.patch(`/tasks/${taskId}/subtasks/${subtaskId}`, data).then(r => r.data),
+  deleteSubtask: (taskId: string, subtaskId: string) =>
+    api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`).then(r => r.data),
 };
