@@ -1,0 +1,147 @@
+import { create } from 'zustand';
+import { Column, Task, FullBoard } from '../types';
+import { boardsApi, columnsApi, tasksApi } from '../api/client';
+
+interface BoardState {
+  board: FullBoard | null;
+  loading: boolean;
+  taskModal: Task | null;
+  openTaskModal: (task: Task) => void;
+  closeTaskModal: () => void;
+  loadBoard: (projectId: string, boardId: string) => Promise<void>;
+  addColumn: (boardId: string, name: string, color?: string) => Promise<void>;
+  updateColumn: (boardId: string, columnId: string, data: any) => Promise<void>;
+  deleteColumn: (boardId: string, columnId: string) => Promise<void>;
+  addTask: (columnId: string, data: any) => Promise<Task>;
+  updateTask: (taskId: string, data: any) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
+  moveTask: (taskId: string, fromColumnId: string, toColumnId: string, newPosition: number) => Promise<void>;
+  reorderColumns: (boardId: string, newOrder: Column[]) => Promise<void>;
+}
+
+export const useBoardStore = create<BoardState>((set, get) => ({
+  board: null,
+  loading: false,
+  taskModal: null,
+
+  openTaskModal: (task) => set({ taskModal: task }),
+  closeTaskModal: () => set({ taskModal: null }),
+
+  loadBoard: async (projectId, boardId) => {
+    set({ loading: true });
+    try {
+      const board = await boardsApi.getFull(projectId, boardId);
+      set({ board });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  addColumn: async (boardId, name, color) => {
+    const col = await columnsApi.create(boardId, { name, color });
+    set((s) => ({
+      board: s.board ? { ...s.board, columns: [...s.board.columns, { ...col, tasks: [] }] } : s.board,
+    }));
+  },
+
+  updateColumn: async (boardId, columnId, data) => {
+    const updated = await columnsApi.update(boardId, columnId, data);
+    set((s) => ({
+      board: s.board
+        ? { ...s.board, columns: s.board.columns.map(c => c.id === columnId ? { ...c, ...updated } : c) }
+        : s.board,
+    }));
+  },
+
+  deleteColumn: async (boardId, columnId) => {
+    await columnsApi.delete(boardId, columnId);
+    set((s) => ({
+      board: s.board
+        ? { ...s.board, columns: s.board.columns.filter(c => c.id !== columnId) }
+        : s.board,
+    }));
+  },
+
+  addTask: async (columnId, data) => {
+    const task = await tasksApi.create(columnId, data);
+    set((s) => ({
+      board: s.board
+        ? {
+            ...s.board,
+            columns: s.board.columns.map(c =>
+              c.id === columnId ? { ...c, tasks: [...c.tasks, task] } : c
+            ),
+          }
+        : s.board,
+    }));
+    return task;
+  },
+
+  updateTask: async (taskId, data) => {
+    const updated = await tasksApi.update(taskId, data);
+    set((s) => ({
+      taskModal: s.taskModal?.id === taskId ? { ...s.taskModal, ...updated } : s.taskModal,
+      board: s.board
+        ? {
+            ...s.board,
+            columns: s.board.columns.map(c => ({
+              ...c,
+              tasks: c.tasks.map(t => t.id === taskId ? { ...t, ...updated } : t),
+            })),
+          }
+        : s.board,
+    }));
+  },
+
+  deleteTask: async (taskId) => {
+    await tasksApi.delete(taskId);
+    set((s) => ({
+      taskModal: s.taskModal?.id === taskId ? null : s.taskModal,
+      board: s.board
+        ? {
+            ...s.board,
+            columns: s.board.columns.map(c => ({
+              ...c,
+              tasks: c.tasks.filter(t => t.id !== taskId),
+            })),
+          }
+        : s.board,
+    }));
+  },
+
+  moveTask: async (taskId, fromColumnId, toColumnId, newPosition) => {
+    // Optimistic update
+    const board = get().board;
+    if (!board) return;
+
+    const fromCol = board.columns.find(c => c.id === fromColumnId);
+    const task = fromCol?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const newColumns = board.columns.map(col => {
+      if (col.id === fromColumnId) {
+        return { ...col, tasks: col.tasks.filter(t => t.id !== taskId) };
+      }
+      if (col.id === toColumnId) {
+        const tasks = [...col.tasks.filter(t => t.id !== taskId)];
+        tasks.splice(newPosition, 0, { ...task, column_id: toColumnId, position: newPosition });
+        return { ...col, tasks: tasks.map((t, i) => ({ ...t, position: i })) };
+      }
+      return col;
+    });
+    set({ board: { ...board, columns: newColumns } });
+
+    try {
+      await tasksApi.move(taskId, toColumnId, newPosition);
+    } catch {
+      // Rollback
+      set({ board });
+    }
+  },
+
+  reorderColumns: async (boardId, newOrder) => {
+    const cols = newOrder.map((c, i) => ({ ...c, position: i }));
+    set((s) => ({ board: s.board ? { ...s.board, columns: cols } : s.board }));
+    await columnsApi.reorder(boardId, cols.map(c => ({ id: c.id, position: c.position })));
+  },
+}));
