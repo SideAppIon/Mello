@@ -18,7 +18,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   company: null,
   token: localStorage.getItem('mello_token'),
-  loading: false,
+  // Если токен есть — стартуем в loading, чтобы ProtectedRoute ждал проверку,
+  // а не редиректил на /login до завершения loadMe()
+  loading: !!localStorage.getItem('mello_token'),
 
   login: async (email, password) => {
     const { user, token } = await authApi.login(email, password);

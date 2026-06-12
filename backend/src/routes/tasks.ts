@@ -175,7 +175,11 @@ router.patch('/:taskId/move', authenticate, async (req: ProjectRequest, res: Res
   );
 
   if (oldTask!.column_id !== column_id) {
-    await logHistory(taskId, user.id, 'moved', 'column_id', oldTask!.column_id, column_id);
+    const [fromCol, toCol] = await Promise.all([
+      queryOne<{ name: string }>('SELECT name FROM columns WHERE id = $1', [oldTask!.column_id]),
+      queryOne<{ name: string }>('SELECT name FROM columns WHERE id = $1', [column_id]),
+    ]);
+    await logHistory(taskId, user.id, 'moved', 'column_id', fromCol?.name ?? oldTask!.column_id, toCol?.name ?? column_id);
   }
 
   // Reorder other tasks in target column
