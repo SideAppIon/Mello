@@ -53,22 +53,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loadMe: async () => {
     const token = localStorage.getItem('mello_token');
-    if (!token) return;
+    if (!token) { set({ loading: false }); return; }
     set({ loading: true });
     try {
       const user = await authApi.me();
-      set({ user });
+      // Снимаем loading сразу — приложение можно показывать,
+      // компанию догружаем в фоне, чтобы её запрос не блокировал вход
+      set({ user, loading: false });
       if (user.company_id) {
-        try {
-          const company = await companiesApi.getMy();
-          set({ company });
-        } catch {}
+        companiesApi.getMy().then(company => set({ company })).catch(() => {});
       }
     } catch {
       localStorage.removeItem('mello_token');
-      set({ user: null, token: null });
-    } finally {
-      set({ loading: false });
+      set({ user: null, token: null, loading: false });
     }
   },
 
