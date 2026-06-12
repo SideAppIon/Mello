@@ -28,6 +28,12 @@ function HistoryAction({ entry }: { entry: HistoryEntry }) {
     deadline: 'дедлайн', estimated_hours: 'оцениваемое время', column_id: 'колонку',
   };
 
+  // Для тегов/исполнителей название поля дублирует action — не показываем
+  const showFieldLabel = entry.field_name && !['tags', 'assignees'].includes(entry.field_name);
+  const isNull = (v: string | null) => !v || v === 'null';
+  const oldVal = isNull(entry.old_value) ? null : entry.old_value;
+  const newVal = isNull(entry.new_value) ? null : entry.new_value;
+
   return (
     <div className="flex gap-2.5 text-sm">
       <Avatar name={entry.full_name || '?'} color={entry.avatar_color || '#94a3b8'} size="sm" className="mt-0.5 flex-shrink-0" />
@@ -35,12 +41,15 @@ function HistoryAction({ entry }: { entry: HistoryEntry }) {
         <span className="font-medium text-gray-800">{entry.full_name || 'Система'}</span>
         {' '}
         <span className="text-gray-500">{actionLabels[entry.action] || entry.action}</span>
-        {entry.field_name && <span className="text-gray-500"> «{fieldLabels[entry.field_name] || entry.field_name}»</span>}
-        {entry.old_value && entry.new_value && (
-          <span className="text-gray-400"> с «{entry.old_value}» на «{entry.new_value}»</span>
+        {showFieldLabel && <span className="text-gray-500"> «{fieldLabels[entry.field_name!] || entry.field_name}»</span>}
+        {oldVal && newVal && (
+          <span className="text-gray-400"> с «{oldVal}» на «{newVal}»</span>
         )}
-        {!entry.old_value && entry.new_value && (
-          <span className="text-gray-400"> «{entry.new_value}»</span>
+        {!oldVal && newVal && (
+          <span className="text-gray-400"> «{newVal}»</span>
+        )}
+        {oldVal && !newVal && (
+          <span className="text-gray-400"> «{oldVal}»</span>
         )}
         <div className="text-xs text-gray-400 mt-0.5">{format(new Date(entry.created_at), 'd MMM, HH:mm', { locale: ru })}</div>
       </div>
@@ -85,10 +94,10 @@ export default function TaskModal() {
 
   if (!task) return null;
 
-  const saveField = async (field: string) => {
+  const saveField = async (field: string, overrideValue?: any) => {
     setSavingField(true);
     try {
-      const value = fieldValues[field];
+      const value = overrideValue !== undefined ? overrideValue : fieldValues[field];
       const payload: any = {};
       if (field === 'priority') payload.priority = parseInt(value);
       else if (field === 'estimated_hours') payload.estimated_hours = value ? parseFloat(value) : null;
@@ -324,7 +333,7 @@ export default function TaskModal() {
             {canEdit ? (
               <select
                 value={fieldValues.priority}
-                onChange={e => { setFieldValues((v: any) => ({ ...v, priority: e.target.value })); saveField('priority'); }}
+                onChange={e => { setFieldValues((v: any) => ({ ...v, priority: e.target.value })); saveField('priority', e.target.value); }}
                 className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
               >
                 {[1, 2, 3, 4, 5].map(p => (

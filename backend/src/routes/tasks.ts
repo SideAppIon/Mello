@@ -28,7 +28,7 @@ async function logHistory(taskId: string, userId: string, action: string, field?
   await queryOne(
     `INSERT INTO task_history (task_id, user_id, action, field_name, old_value, new_value)
      VALUES ($1, $2, $3, $4, $5, $6)`,
-    [taskId, userId, action, field || null, oldVal !== undefined ? String(oldVal) : null, newVal !== undefined ? String(newVal) : null]
+    [taskId, userId, action, field || null, oldVal != null ? String(oldVal) : null, newVal != null ? String(newVal) : null]
   );
 }
 
@@ -277,7 +277,8 @@ router.post('/:taskId/assignees', authenticate, async (req: ProjectRequest, res:
     [taskId, user_id]
   );
   const user = (req as AuthRequest).user!;
-  await logHistory(taskId, user.id, 'assignee_added', 'assignees', null, user_id);
+  const assignee = await queryOne<{ full_name: string }>('SELECT full_name FROM users WHERE id = $1', [user_id]);
+  await logHistory(taskId, user.id, 'assignee_added', 'assignees', null, assignee?.full_name ?? user_id);
   res.json({ ok: true });
 });
 
@@ -285,7 +286,8 @@ router.delete('/:taskId/assignees/:userId', authenticate, async (req: ProjectReq
   const { taskId, userId } = req.params;
   await queryOne('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = $2', [taskId, userId]);
   const user = (req as AuthRequest).user!;
-  await logHistory(taskId, user.id, 'assignee_removed', 'assignees', userId, null);
+  const assignee = await queryOne<{ full_name: string }>('SELECT full_name FROM users WHERE id = $1', [userId]);
+  await logHistory(taskId, user.id, 'assignee_removed', 'assignees', assignee?.full_name ?? userId, null);
   res.json({ ok: true });
 });
 
