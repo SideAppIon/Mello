@@ -55,6 +55,12 @@ export const projectsApi = {
   updateMember: (id: string, userId: string, data: any) => api.patch(`/projects/${id}/members/${userId}`, data).then(r => r.data),
   removeMember: (id: string, userId: string) => api.delete(`/projects/${id}/members/${userId}`).then(r => r.data),
   setPermissions: (id: string, permissions: any[]) => api.put(`/projects/${id}/permissions`, { permissions }).then(r => r.data),
+  createCustomField: (id: string, data: { name: string; field_type: string; options?: string[] }) =>
+    api.post(`/projects/${id}/custom-fields`, data).then(r => r.data),
+  updateCustomField: (id: string, fieldId: string, data: { name?: string; options?: string[] }) =>
+    api.patch(`/projects/${id}/custom-fields/${fieldId}`, data).then(r => r.data),
+  deleteCustomField: (id: string, fieldId: string) =>
+    api.delete(`/projects/${id}/custom-fields/${fieldId}`).then(r => r.data),
 };
 
 // Boards
@@ -90,4 +96,6 @@ export const tasksApi = {
   updateComment: (taskId: string, commentId: string, content: string) => api.patch(`/tasks/${taskId}/comments/${commentId}`, { content }).then(r => r.data),
   deleteComment: (taskId: string, commentId: string) => api.delete(`/tasks/${taskId}/comments/${commentId}`).then(r => r.data),
   getHistory: (taskId: string) => api.get(`/tasks/${taskId}/history`).then(r => r.data),
+  setCustomValue: (taskId: string, fieldId: string, value: string | null) =>
+    api.put(`/tasks/${taskId}/custom-values/${fieldId}`, { value }).then(r => r.data),
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Task, Comment, HistoryEntry, PRIORITY_LABELS, ROLE_LABELS, Tag } from '../types';
+import { Task, Comment, HistoryEntry, PRIORITY_LABELS, ROLE_LABELS, Tag, CustomField } from '../types';
 import { tasksApi } from '../api/client';
 import { useBoardStore } from '../store/board';
 import { useAuthStore } from '../store/auth';
@@ -373,6 +373,11 @@ export default function TaskModal() {
             )}
           </div>
 
+          {/* Custom fields */}
+          {board?.custom_fields?.map(field => (
+            <CustomFieldEditor key={field.id} task={task} field={field} canEdit={canEdit} />
+          ))}
+
           {/* Assignees */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Исполнители</label>
@@ -402,6 +407,43 @@ export default function TaskModal() {
         </div>
       </div>
     </Modal>
+  );
+}
+
+function CustomFieldEditor({ task, field, canEdit }: { task: Task; field: CustomField; canEdit: boolean }) {
+  const { patchTaskLocal } = useBoardStore();
+  const current = task.custom_values?.[field.id] ?? '';
+  const [value, setValue] = useState(current);
+
+  useEffect(() => { setValue(task.custom_values?.[field.id] ?? ''); }, [task.id, task.custom_values, field.id]);
+
+  const save = async (v: string) => {
+    const result = await tasksApi.setCustomValue(task.id, field.id, v === '' ? null : v);
+    patchTaskLocal(task.id, { custom_values: result.custom_values });
+  };
+
+  const inputClass = "mt-1 w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{field.name}</label>
+      {!canEdit ? (
+        <p className="mt-1 text-sm text-gray-600">{current || '—'}</p>
+      ) : field.field_type === 'select' ? (
+        <select value={value} onChange={e => { setValue(e.target.value); save(e.target.value); }} className={inputClass}>
+          <option value="">—</option>
+          {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input
+          type={field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onBlur={() => { if (value !== current) save(value); }}
+          className={inputClass}
+        />
+      )}
+    </div>
   );
 }
 

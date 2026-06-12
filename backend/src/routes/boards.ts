@@ -57,15 +57,22 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
   const tasks = await query<any>(
     `SELECT t.*,
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees
+            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
+            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values
      FROM tasks t
      LEFT JOIN task_tags tt ON tt.task_id = t.id
      LEFT JOIN task_assignees ta ON ta.task_id = t.id
      LEFT JOIN users u ON u.id = ta.user_id
+     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
      WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1)
      GROUP BY t.id
      ORDER BY t.position ASC`,
     [boardId]
+  );
+
+  const custom_fields = await query<any>(
+    'SELECT * FROM project_custom_fields WHERE project_id = $1 ORDER BY position ASC, created_at ASC',
+    [req.projectId]
   );
 
   const tasksByColumn = tasks.reduce((acc: any, task: any) => {
@@ -80,6 +87,7 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
       ...col,
       tasks: tasksByColumn[col.id] || [],
     })),
+    custom_fields,
     my_role: req.projectMember!.role,
   });
 });

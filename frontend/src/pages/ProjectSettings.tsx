@@ -8,12 +8,20 @@ import Modal from '../components/Modal';
 
 const PROJECT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6'];
 
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  text: 'Текст',
+  number: 'Число',
+  date: 'Дата',
+  select: 'Список',
+};
+
 export default function ProjectSettings() {
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [companyMembers, setCompanyMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'permissions'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'members' | 'permissions' | 'fields'>('general');
+  const [newField, setNewField] = useState<{ name: string; field_type: string; options: string }>({ name: '', field_type: 'text', options: '' });
   const [showAddMember, setShowAddMember] = useState(false);
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState('member');
@@ -47,6 +55,22 @@ export default function ProjectSettings() {
     if (!projectId || !confirm('Удалить проект со всеми досками и задачами? Это необратимо.')) return;
     await projectsApi.delete(projectId);
     navigate('/');
+  };
+
+  const addCustomField = async () => {
+    if (!projectId || !newField.name.trim()) return;
+    const options = newField.field_type === 'select'
+      ? newField.options.split(',').map(o => o.trim()).filter(Boolean)
+      : [];
+    await projectsApi.createCustomField(projectId, { name: newField.name.trim(), field_type: newField.field_type, options });
+    setNewField({ name: '', field_type: 'text', options: '' });
+    await load();
+  };
+
+  const deleteCustomField = async (fieldId: string) => {
+    if (!projectId || !confirm('Удалить поле? Его значения во всех задачах будут удалены.')) return;
+    await projectsApi.deleteCustomField(projectId, fieldId);
+    await load();
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [projectId]);
@@ -115,13 +139,13 @@ export default function ProjectSettings() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Настройки проекта</h1>
 
         <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-100 p-1 w-fit">
-          {(['general', 'members', 'permissions'] as const).map(t => (
+          {(['general', 'members', 'permissions', 'fields'] as const).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === t ? 'bg-brand-500 text-white' : 'text-gray-600 hover:text-gray-900'}`}
             >
-              {t === 'general' ? 'Общие' : t === 'members' ? 'Участники' : 'Права доступа'}
+              {t === 'general' ? 'Общие' : t === 'members' ? 'Участники' : t === 'permissions' ? 'Права доступа' : 'Кастомные поля'}
             </button>
           ))}
         </div>
@@ -267,6 +291,76 @@ export default function ProjectSettings() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'fields' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Кастомные поля</h2>
+                <p className="text-sm text-gray-400 mt-0.5">Дополнительные поля для всех задач проекта</p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {(project.custom_fields || []).map(f => (
+                  <div key={f.id} className="flex items-center gap-4 px-6 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900">{f.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {FIELD_TYPE_LABELS[f.field_type]}
+                        {f.field_type === 'select' && f.options?.length > 0 && `: ${f.options.join(', ')}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteCustomField(f.id)}
+                      className="text-gray-300 hover:text-red-400 transition-colors text-sm px-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {(project.custom_fields || []).length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-8">Пока нет кастомных полей</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+              <h3 className="font-semibold text-gray-900">Добавить поле</h3>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  value={newField.name}
+                  onChange={e => setNewField(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Название поля"
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                />
+                <select
+                  value={newField.field_type}
+                  onChange={e => setNewField(f => ({ ...f, field_type: e.target.value }))}
+                  className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                >
+                  <option value="text">Текст</option>
+                  <option value="number">Число</option>
+                  <option value="date">Дата</option>
+                  <option value="select">Список</option>
+                </select>
+              </div>
+              {newField.field_type === 'select' && (
+                <input
+                  value={newField.options}
+                  onChange={e => setNewField(f => ({ ...f, options: e.target.value }))}
+                  placeholder="Варианты через запятую: Низкий, Средний, Высокий"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                />
+              )}
+              <button
+                onClick={addCustomField}
+                disabled={!newField.name.trim() || (newField.field_type === 'select' && !newField.options.trim())}
+                className="bg-brand-500 text-white px-5 py-2 rounded-xl text-sm hover:bg-brand-600 disabled:opacity-50 transition-colors"
+              >
+                Добавить поле
+              </button>
             </div>
           </div>
         )}

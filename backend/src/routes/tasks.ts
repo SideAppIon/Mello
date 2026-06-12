@@ -37,11 +37,13 @@ async function getFullTask(taskId: string) {
     `SELECT t.*,
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color, 'email', u.email)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
+            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
             ub.full_name as created_by_name
      FROM tasks t
      LEFT JOIN task_tags tt ON tt.task_id = t.id
      LEFT JOIN task_assignees ta ON ta.task_id = t.id
      LEFT JOIN users u ON u.id = ta.user_id
+     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
      LEFT JOIN users ub ON ub.id = t.created_by
      WHERE t.id = $1
      GROUP BY t.id, ub.full_name`,
@@ -179,7 +181,7 @@ router.patch('/:taskId/move', authenticate, async (req: ProjectRequest, res: Res
       queryOne<{ name: string }>('SELECT name FROM columns WHERE id = $1', [oldTask!.column_id]),
       queryOne<{ name: string }>('SELECT name FROM columns WHERE id = $1', [column_id]),
     ]);
-    await logHistory(taskId, user.id, 'moved', 'column_id', fromCol?.name ?? oldTask!.column_id, toCol?.name ?? column_id);
+    await logHistory(taskId, user.id, 'moved', 'column_id', fromCol?.name ?? '—', toCol?.name ?? '—');
   }
 
   // Reorder other tasks in target column
@@ -191,6 +193,35 @@ router.patch('/:taskId/move', authenticate, async (req: ProjectRequest, res: Res
     );
   }
 
+  res.json(await getFullTask(taskId));
+});
+
+// Set a custom field value
+router.put('/:taskId/custom-values/:fieldId', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId, fieldId } = req.params;
+  const { value } = req.body;
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  // Validate field belongs to this project
+  const field = await queryOne<any>('SELECT id FROM project_custom_fields WHERE id = $1 AND project_id = $2', [fieldId, projectId]);
+  if (!field) return res.status(404).json({ error: 'Field not found' });
+
+  if (value === null || value === '') {
+    await queryOne('DELETE FROM task_custom_values WHERE task_id = $1 AND field_id = $2', [taskId, fieldId]);
+  } else {
+    await queryOne(
+      `INSERT INTO task_custom_values (task_id, field_id, value) VALUES ($1, $2, $3)
+       ON CONFLICT (task_id, field_id) DO UPDATE SET value = $3`,
+      [taskId, fieldId, String(value)]
+    );
+  }
   res.json(await getFullTask(taskId));
 });
 

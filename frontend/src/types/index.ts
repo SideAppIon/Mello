@@ -30,6 +30,18 @@ export interface FieldPermission {
   can_edit: boolean;
 }
 
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select';
+
+export interface CustomField {
+  id: string;
+  project_id: string;
+  name: string;
+  field_type: CustomFieldType;
+  options: string[];
+  position: number;
+  created_at: string;
+}
+
 export interface Project {
   id: string;
   company_id: string;
@@ -43,6 +55,7 @@ export interface Project {
   my_role?: string;
   members?: ProjectMember[];
   permissions?: FieldPermission[];
+  custom_fields?: CustomField[];
 }
 
 export interface Board {
@@ -75,6 +88,7 @@ export interface Task {
   updated_at: string;
   tags: Tag[];
   assignees: Pick<User, 'id' | 'full_name' | 'avatar_color'>[];
+  custom_values?: Record<string, string>;
 }
 
 export interface Column {
@@ -88,6 +102,7 @@ export interface Column {
 
 export interface FullBoard extends Board {
   columns: Column[];
+  custom_fields: CustomField[];
   my_role: string;
 }
 

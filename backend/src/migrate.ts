@@ -112,6 +112,25 @@ CREATE TABLE IF NOT EXISTS task_history (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS project_custom_fields (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name VARCHAR(128) NOT NULL,
+  field_type VARCHAR(16) NOT NULL DEFAULT 'text' CHECK (field_type IN ('text', 'number', 'date', 'select')),
+  options JSONB NOT NULL DEFAULT '[]',
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS task_custom_values (
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  field_id UUID NOT NULL REFERENCES project_custom_fields(id) ON DELETE CASCADE,
+  value TEXT,
+  PRIMARY KEY (task_id, field_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
+CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(column_id);
 CREATE INDEX IF NOT EXISTS idx_columns_board ON columns(board_id);
 CREATE INDEX IF NOT EXISTS idx_boards_project ON boards(project_id);

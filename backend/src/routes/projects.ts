@@ -81,7 +81,11 @@ router.get('/:id', authenticate, requireProjectAccess, async (req: ProjectReques
     'SELECT role, field_name, can_edit FROM project_field_permissions WHERE project_id = $1',
     [req.projectId]
   );
-  res.json({ ...project, members, permissions, my_role: req.projectMember!.role });
+  const custom_fields = await query<any>(
+    'SELECT * FROM project_custom_fields WHERE project_id = $1 ORDER BY position ASC, created_at ASC',
+    [req.projectId]
+  );
+  res.json({ ...project, members, permissions, custom_fields, my_role: req.projectMember!.role });
 });
 
 router.patch('/:id', authenticate, requireProjectAccess, requireProjectRole('admin'), async (req: ProjectRequest, res: Response) => {
@@ -145,6 +149,44 @@ router.put('/:id/permissions', authenticate, requireProjectAccess, requireProjec
       [req.projectId, p.role, p.field_name, p.can_edit]
     );
   }
+  res.json({ ok: true });
+});
+
+// Custom fields (definitions)
+router.post('/:id/custom-fields', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { name, field_type = 'text', options = [] } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Field name required' });
+  if (!['text', 'number', 'date', 'select'].includes(field_type)) return res.status(400).json({ error: 'Invalid field type' });
+  const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM project_custom_fields WHERE project_id = $1', [req.projectId]);
+  const position = parseInt(maxPos?.max || '-1') + 1;
+  const field = await queryOne<any>(
+    'INSERT INTO project_custom_fields (project_id, name, field_type, options, position) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [req.projectId, name.trim(), field_type, JSON.stringify(field_type === 'select' ? options : []), position]
+  );
+  res.status(201).json(field);
+});
+
+router.patch('/:id/custom-fields/:fieldId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { fieldId } = req.params;
+  const { name, options } = req.body;
+  const updates: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (name) { updates.push(`name = $${i++}`); params.push(name.trim()); }
+  if (options !== undefined) { updates.push(`options = $${i++}`); params.push(JSON.stringify(options)); }
+  if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
+  params.push(fieldId, req.projectId);
+  const field = await queryOne<any>(
+    `UPDATE project_custom_fields SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i} RETURNING *`,
+    params
+  );
+  if (!field) return res.status(404).json({ error: 'Field not found' });
+  res.json(field);
+});
+
+router.delete('/:id/custom-fields/:fieldId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { fieldId } = req.params;
+  await queryOne('DELETE FROM project_custom_fields WHERE id = $1 AND project_id = $2', [fieldId, req.projectId]);
   res.json({ ok: true });
 });
 
