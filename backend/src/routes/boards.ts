@@ -25,12 +25,14 @@ router.post('/', authenticate, requireProjectAccess, requireProjectRole('admin',
 
 router.patch('/:boardId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
-  const { name, completed_column_id } = req.body;
+  const { name, completed_column_id, background, column_style } = req.body;
   const updates: string[] = [];
   const params: any[] = [];
   let i = 1;
   if (name !== undefined) { updates.push(`name = $${i++}`); params.push(name); }
   if (completed_column_id !== undefined) { updates.push(`completed_column_id = $${i++}`); params.push(completed_column_id); }
+  if (background !== undefined) { updates.push(`background = $${i++}`); params.push(background); }
+  if (column_style !== undefined) { updates.push(`column_style = $${i++}`); params.push(column_style); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(boardId, req.projectId);
   const board = await queryOne<any>(

@@ -68,7 +68,7 @@ export const projectsApi = {
 export const boardsApi = {
   list: (projectId: string) => api.get(`/projects/${projectId}/boards`).then(r => r.data),
   create: (projectId: string, name: string) => api.post(`/projects/${projectId}/boards`, { name }).then(r => r.data),
-  update: (projectId: string, boardId: string, data: { name?: string; completed_column_id?: string | null }) => api.patch(`/projects/${projectId}/boards/${boardId}`, data).then(r => r.data),
+  update: (projectId: string, boardId: string, data: { name?: string; completed_column_id?: string | null; background?: string; column_style?: string }) => api.patch(`/projects/${projectId}/boards/${boardId}`, data).then(r => r.data),
   delete: (projectId: string, boardId: string) => api.delete(`/projects/${projectId}/boards/${boardId}`).then(r => r.data),
   getFull: (projectId: string, boardId: string) => api.get(`/projects/${projectId}/boards/${boardId}/full`).then(r => r.data),
   getCompleted: (projectId: string, boardId: string) => api.get(`/projects/${projectId}/boards/${boardId}/completed`).then(r => r.data),

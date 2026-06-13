@@ -146,6 +146,8 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 ALTER TABLE boards ADD COLUMN IF NOT EXISTS completed_column_id UUID REFERENCES columns(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(column_id, is_completed);
+ALTER TABLE boards ADD COLUMN IF NOT EXISTS background VARCHAR(64) NOT NULL DEFAULT 'default';
+ALTER TABLE boards ADD COLUMN IF NOT EXISTS column_style VARCHAR(32) NOT NULL DEFAULT 'cards';
 
 CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);

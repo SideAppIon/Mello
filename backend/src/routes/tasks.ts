@@ -176,9 +176,24 @@ router.patch('/:taskId/move', authenticate, async (req: ProjectRequest, res: Res
   }
 
   const oldTask = await queryOne<any>('SELECT * FROM tasks WHERE id = $1', [taskId]);
+
+  // Авто-пометка выполнения по столбцу выполненных
+  const boardRow = await queryOne<{ completed_column_id: string | null }>(
+    `SELECT b.completed_column_id FROM columns c JOIN boards b ON b.id = c.board_id WHERE c.id = $1`,
+    [column_id]
+  );
+  const movingToCompleted = boardRow?.completed_column_id === column_id;
+  const wasCompleted = oldTask!.is_completed;
+  let completedSet = wasCompleted;
+
+  if (oldTask!.column_id !== column_id) {
+    if (movingToCompleted && !wasCompleted) completedSet = true;
+    else if (!movingToCompleted && wasCompleted) completedSet = false;
+  }
+
   await queryOne(
-    'UPDATE tasks SET column_id = $1, position = $2, updated_at = NOW() WHERE id = $3',
-    [column_id, position ?? 0, taskId]
+    'UPDATE tasks SET column_id = $1, position = $2, is_completed = $3, completed_at = $4, updated_at = NOW() WHERE id = $5',
+    [column_id, position ?? 0, completedSet, completedSet ? (wasCompleted ? oldTask!.completed_at : new Date()) : null, taskId]
   );
 
   if (oldTask!.column_id !== column_id) {
@@ -187,6 +202,8 @@ router.patch('/:taskId/move', authenticate, async (req: ProjectRequest, res: Res
       queryOne<{ name: string }>('SELECT name FROM columns WHERE id = $1', [column_id]),
     ]);
     await logHistory(taskId, user.id, 'moved', 'column_id', fromCol?.name ?? '—', toCol?.name ?? '—');
+    if (completedSet && !wasCompleted) await logHistory(taskId, user.id, 'completed');
+    if (!completedSet && wasCompleted) await logHistory(taskId, user.id, 'reopened');
   }
 
   // Reorder other tasks in target column

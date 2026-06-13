@@ -117,6 +117,8 @@ export interface FullBoard extends Board {
   columns: Column[];
   custom_fields: CustomField[];
   completed_column_id: string | null;
+  background: string;
+  column_style: string;
   my_role: string;
 }
 

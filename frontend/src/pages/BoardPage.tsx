@@ -13,15 +13,37 @@ import TaskModal from '../components/TaskModal';
 import { Task, Column } from '../types';
 import TaskCard from '../components/TaskCard';
 
+export const BOARD_BACKGROUNDS: { key: string; label: string; css: string; dark?: boolean }[] = [
+  { key: 'default', label: 'Светлый', css: '#f9fafb' },
+  { key: 'white', label: 'Белый', css: '#ffffff' },
+  { key: 'mint', label: 'Мята', css: 'linear-gradient(135deg, #d1fae5, #f0fdfa)' },
+  { key: 'sky', label: 'Небо', css: 'linear-gradient(135deg, #dbeafe, #eff6ff)' },
+  { key: 'peach', label: 'Персик', css: 'linear-gradient(135deg, #fef3c7, #ffe4e6)' },
+  { key: 'lavender', label: 'Лаванда', css: 'linear-gradient(135deg, #ede9fe, #fae8ff)' },
+  { key: 'ocean', label: 'Океан', css: 'linear-gradient(135deg, #38bdf8, #6366f1)', dark: true },
+  { key: 'graphite', label: 'Графит', css: 'linear-gradient(135deg, #1f2937, #374151)', dark: true },
+];
+
+export const COLUMN_STYLES: { key: string; label: string }[] = [
+  { key: 'cards', label: 'Карточки' },
+  { key: 'minimal', label: 'Минимал' },
+  { key: 'glass', label: 'Стекло' },
+];
+
+export function getBackgroundCss(key: string): string {
+  return (BOARD_BACKGROUNDS.find(b => b.key === key) || BOARD_BACKGROUNDS[0]).css;
+}
+
 export default function BoardPage() {
   const { projectId, boardId } = useParams<{ projectId: string; boardId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { board, loading, loadBoard, addColumn, moveTask, reorderColumns, taskModal, openTaskModal,
-    completedTasks, showCompleted, setShowCompleted, loadCompleted } = useBoardStore();
+    completedTasks, showCompleted, setShowCompleted, loadCompleted, setBoardStyle } = useBoardStore();
   const [addingColumn, setAddingColumn] = useState(false);
   const [colName, setColName] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [onlyMine, setOnlyMine] = useState(false);
+  const [styleMenu, setStyleMenu] = useState(false);
   const currentUser = useAuthStore(s => s.user);
 
   const sensors = useSensors(
@@ -199,6 +221,47 @@ export default function BoardPage() {
           </svg>
           {showCompleted ? 'Скрыть выполненные' : 'Показать выполненные'}
         </button>
+        {['admin', 'manager'].includes(myRole) && (
+          <div className="relative">
+            <button
+              onClick={() => setStyleMenu(v => !v)}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border text-gray-600 border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              Оформление
+            </button>
+            {styleMenu && (
+              <div className="absolute right-0 top-10 bg-white rounded-2xl shadow-xl border border-gray-100 p-4 w-64 z-30">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Фон доски</div>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {BOARD_BACKGROUNDS.map(bg => (
+                    <button
+                      key={bg.key}
+                      onClick={() => setBoardStyle(board.id, { background: bg.key })}
+                      title={bg.label}
+                      className={`h-10 rounded-lg border-2 transition-transform hover:scale-105 ${board.background === bg.key ? 'border-brand-500' : 'border-transparent ring-1 ring-gray-200'}`}
+                      style={{ background: bg.css }}
+                    />
+                  ))}
+                </div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Стиль столбцов</div>
+                <div className="flex gap-2">
+                  {COLUMN_STYLES.map(cs => (
+                    <button
+                      key={cs.key}
+                      onClick={() => setBoardStyle(board.id, { column_style: cs.key })}
+                      className={`flex-1 text-xs py-2 rounded-lg border transition-colors ${board.column_style === cs.key ? 'bg-brand-500 text-white border-brand-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      {cs.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <button
           onClick={() => setOnlyMine(v => !v)}
           className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
@@ -213,7 +276,7 @@ export default function BoardPage() {
       </div>
 
       {/* Kanban board */}
-      <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 overflow-x-auto" style={{ background: getBackgroundCss(board.background) }}>
         <div className="p-6 flex gap-4 min-w-max min-h-full items-start">
           <DndContext
             sensors={sensors}
@@ -227,7 +290,7 @@ export default function BoardPage() {
               strategy={horizontalListSortingStrategy}
             >
               {displayColumns.map(col => (
-                <BoardColumn key={col.id} column={col} projectId={projectId!} myRole={myRole} />
+                <BoardColumn key={col.id} column={col} projectId={projectId!} myRole={myRole} columnStyle={board.column_style} />
               ))}
             </SortableContext>
 

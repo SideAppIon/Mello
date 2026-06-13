@@ -15,6 +15,7 @@ interface BoardState {
   setShowCompleted: (v: boolean) => void;
   completeTask: (taskId: string, completed: boolean) => Promise<void>;
   setCompletedColumn: (boardId: string, columnId: string) => Promise<void>;
+  setBoardStyle: (boardId: string, data: { background?: string; column_style?: string }) => Promise<void>;
   addColumn: (boardId: string, name: string, color?: string) => Promise<void>;
   updateColumn: (boardId: string, columnId: string, data: any) => Promise<void>;
   deleteColumn: (boardId: string, columnId: string) => Promise<void>;
@@ -72,6 +73,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!board) return;
     await boardsApi.update(board.project_id, boardId, { completed_column_id: columnId });
     set((s) => ({ board: s.board ? { ...s.board, completed_column_id: columnId } : s.board }));
+  },
+
+  setBoardStyle: async (boardId, data) => {
+    const board = get().board;
+    if (!board) return;
+    set((s) => ({ board: s.board ? { ...s.board, ...data } : s.board }));
+    await boardsApi.update(board.project_id, boardId, data);
   },
 
   addColumn: async (boardId, name, color) => {
@@ -191,6 +199,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     try {
       await tasksApi.move(taskId, toColumnId, newPosition);
+      // Если задача уехала в столбец выполненных (или из него) — статус меняется на сервере,
+      // перезагружаем доску, чтобы корректно скрыть/показать выполненную
+      const completedId = board.completed_column_id;
+      if (completedId && (toColumnId === completedId || fromColumnId === completedId)) {
+        await get().loadBoard(board.project_id, board.id);
+      }
     } catch {
       // Rollback
       set({ board });

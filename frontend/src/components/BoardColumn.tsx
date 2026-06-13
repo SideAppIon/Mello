@@ -10,7 +10,14 @@ interface Props {
   column: Column;
   projectId: string;
   myRole: string;
+  columnStyle?: string;
 }
+
+const COLUMN_STYLE_CLASSES: Record<string, string> = {
+  cards: 'bg-gray-50 rounded-2xl p-3',
+  minimal: 'bg-transparent border-t-2 pt-3 px-1',
+  glass: 'bg-white/60 backdrop-blur-sm rounded-2xl p-3 border border-white/40 shadow-sm',
+};
 
 function AddTaskForm({ columnId, onDone }: { columnId: string; onDone: () => void }) {
   const [title, setTitle] = useState('');
@@ -142,7 +149,7 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
   );
 }
 
-export default function BoardColumn({ column, projectId, myRole }: Props) {
+export default function BoardColumn({ column, projectId, myRole, columnStyle = 'cards' }: Props) {
   const [addingTask, setAddingTask] = useState(false);
   const board = useBoardStore(s => s.board);
   const canAdd = ['admin', 'manager', 'member'].includes(myRole);
@@ -166,7 +173,8 @@ export default function BoardColumn({ column, projectId, myRole }: Props) {
       className="flex-shrink-0 w-72 flex flex-col"
     >
       <div
-        className={`bg-gray-50 rounded-2xl p-3 flex flex-col h-full transition-colors ${isOver ? 'bg-brand-50 ring-2 ring-brand-500/30' : ''}`}
+        className={`${COLUMN_STYLE_CLASSES[columnStyle] || COLUMN_STYLE_CLASSES.cards} flex flex-col h-full transition-colors ${isOver ? 'ring-2 ring-brand-500/40' : ''}`}
+        style={columnStyle === 'minimal' ? { borderTopColor: column.color } : undefined}
         ref={dropRef}
       >
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
