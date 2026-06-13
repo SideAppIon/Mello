@@ -16,7 +16,8 @@ import TaskCard from '../components/TaskCard';
 export default function BoardPage() {
   const { projectId, boardId } = useParams<{ projectId: string; boardId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { board, loading, loadBoard, addColumn, moveTask, reorderColumns, taskModal, openTaskModal } = useBoardStore();
+  const { board, loading, loadBoard, addColumn, moveTask, reorderColumns, taskModal, openTaskModal,
+    completedTasks, showCompleted, setShowCompleted, loadCompleted } = useBoardStore();
   const [addingColumn, setAddingColumn] = useState(false);
   const [colName, setColName] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -143,12 +144,24 @@ export default function BoardPage() {
 
   const myRole = board?.my_role || 'viewer';
 
-  const displayColumns = (board && onlyMine && currentUser)
-    ? board.columns.map(col => ({
-        ...col,
-        tasks: col.tasks.filter(t => t.assignees.some(a => a.id === currentUser.id)),
-      }))
-    : board?.columns || [];
+  const displayColumns = board
+    ? board.columns.map(col => {
+        let tasks = col.tasks;
+        if (showCompleted && col.id === board.completed_column_id) {
+          tasks = [...tasks, ...completedTasks];
+        }
+        if (onlyMine && currentUser) {
+          tasks = tasks.filter(t => t.assignees.some(a => a.id === currentUser.id));
+        }
+        return { ...col, tasks };
+      })
+    : [];
+
+  const toggleCompleted = () => {
+    const v = !showCompleted;
+    setShowCompleted(v);
+    if (v && projectId && boardId) loadCompleted(projectId, boardId);
+  };
 
   if (loading || !board) {
     return (
@@ -175,6 +188,17 @@ export default function BoardPage() {
           <span className="text-gray-700 font-semibold">{board.name}</span>
         </div>
         <div className="flex-1" />
+        <button
+          onClick={toggleCompleted}
+          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
+            showCompleted ? 'bg-green-500 text-white border-green-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {showCompleted ? 'Скрыть выполненные' : 'Показать выполненные'}
+        </button>
         <button
           onClick={() => setOnlyMine(v => !v)}
           className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${

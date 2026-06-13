@@ -25,10 +25,17 @@ router.post('/', authenticate, requireProjectAccess, requireProjectRole('admin',
 
 router.patch('/:boardId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
-  const { name } = req.body;
+  const { name, completed_column_id } = req.body;
+  const updates: string[] = [];
+  const params: any[] = [];
+  let i = 1;
+  if (name !== undefined) { updates.push(`name = $${i++}`); params.push(name); }
+  if (completed_column_id !== undefined) { updates.push(`completed_column_id = $${i++}`); params.push(completed_column_id); }
+  if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
+  params.push(boardId, req.projectId);
   const board = await queryOne<any>(
-    'UPDATE boards SET name = $1 WHERE id = $2 AND project_id = $3 RETURNING *',
-    [name, boardId, req.projectId]
+    `UPDATE boards SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i} RETURNING *`,
+    params
   );
   if (!board) return res.status(404).json({ error: 'Board not found' });
   res.json(board);
@@ -65,7 +72,7 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
      LEFT JOIN task_assignees ta ON ta.task_id = t.id
      LEFT JOIN users u ON u.id = ta.user_id
      LEFT JOIN task_custom_values cv ON cv.task_id = t.id
-     WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1)
+     WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1) AND t.is_completed = FALSE
      GROUP BY t.id
      ORDER BY t.position ASC`,
     [boardId]
@@ -91,6 +98,28 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
     custom_fields,
     my_role: req.projectMember!.role,
   });
+});
+
+// Lazy-load completed tasks for a board (loaded only on demand)
+router.get('/:boardId/completed', authenticate, requireProjectAccess, async (req: ProjectRequest, res: Response) => {
+  const { boardId } = req.params;
+  const tasks = await query<any>(
+    `SELECT t.*,
+            COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
+            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
+            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
+            COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks
+     FROM tasks t
+     LEFT JOIN task_tags tt ON tt.task_id = t.id
+     LEFT JOIN task_assignees ta ON ta.task_id = t.id
+     LEFT JOIN users u ON u.id = ta.user_id
+     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
+     WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1) AND t.is_completed = TRUE
+     GROUP BY t.id
+     ORDER BY t.completed_at DESC NULLS LAST`,
+    [boardId]
+  );
+  res.json(tasks);
 });
 
 export default router;

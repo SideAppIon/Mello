@@ -58,8 +58,13 @@ export default function TaskCard({ task }: Props) {
         </div>
       )}
 
-      <p className="text-sm font-medium text-gray-900 leading-snug mb-2 group-hover:text-brand-600 transition-colors">
-        {task.title}
+      <p className={`text-sm font-medium leading-snug mb-2 transition-colors flex items-start gap-1.5 ${task.is_completed ? 'text-gray-400 line-through' : 'text-gray-900 group-hover:text-brand-600'}`}>
+        {task.is_completed && (
+          <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )}
+        <span>{task.title}</span>
       </p>
 
       <div className="flex items-center justify-between gap-2 flex-wrap">

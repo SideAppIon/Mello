@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS subtasks (
 
 CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id);
 
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+ALTER TABLE boards ADD COLUMN IF NOT EXISTS completed_column_id UUID REFERENCES columns(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(column_id, is_completed);
+
 CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(column_id);

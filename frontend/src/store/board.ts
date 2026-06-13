@@ -6,9 +6,15 @@ interface BoardState {
   board: FullBoard | null;
   loading: boolean;
   taskModal: Task | null;
+  completedTasks: Task[];
+  showCompleted: boolean;
   openTaskModal: (task: Task) => void;
   closeTaskModal: () => void;
   loadBoard: (projectId: string, boardId: string) => Promise<void>;
+  loadCompleted: (projectId: string, boardId: string) => Promise<void>;
+  setShowCompleted: (v: boolean) => void;
+  completeTask: (taskId: string, completed: boolean) => Promise<void>;
+  setCompletedColumn: (boardId: string, columnId: string) => Promise<void>;
   addColumn: (boardId: string, name: string, color?: string) => Promise<void>;
   updateColumn: (boardId: string, columnId: string, data: any) => Promise<void>;
   deleteColumn: (boardId: string, columnId: string) => Promise<void>;
@@ -24,6 +30,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   board: null,
   loading: false,
   taskModal: null,
+  completedTasks: [],
+  showCompleted: false,
 
   openTaskModal: (task) => set({ taskModal: task }),
   closeTaskModal: () => set({ taskModal: null }),
@@ -33,9 +41,37 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     try {
       const board = await boardsApi.getFull(projectId, boardId);
       set({ board });
+      if (get().showCompleted) {
+        const completedTasks = await boardsApi.getCompleted(projectId, boardId);
+        set({ completedTasks });
+      }
     } finally {
       set({ loading: false });
     }
+  },
+
+  loadCompleted: async (projectId, boardId) => {
+    const completedTasks = await boardsApi.getCompleted(projectId, boardId);
+    set({ completedTasks });
+  },
+
+  setShowCompleted: (v) => {
+    set({ showCompleted: v });
+    if (!v) set({ completedTasks: [] });
+  },
+
+  completeTask: async (taskId, completed) => {
+    const updated = await tasksApi.complete(taskId, completed);
+    set((s) => ({ taskModal: s.taskModal?.id === taskId ? { ...s.taskModal, ...updated } : s.taskModal }));
+    const board = get().board;
+    if (board) await get().loadBoard(board.project_id, board.id);
+  },
+
+  setCompletedColumn: async (boardId, columnId) => {
+    const board = get().board;
+    if (!board) return;
+    await boardsApi.update(board.project_id, boardId, { completed_column_id: columnId });
+    set((s) => ({ board: s.board ? { ...s.board, completed_column_id: columnId } : s.board }));
   },
 
   addColumn: async (boardId, name, color) => {

@@ -22,6 +22,8 @@ function HistoryAction({ entry }: { entry: HistoryEntry }) {
     assignee_added: 'назначил исполнителя',
     assignee_removed: 'снял исполнителя',
     comment_added: 'добавил комментарий',
+    completed: 'отметил выполненной',
+    reopened: 'вернул в работу',
   };
   const fieldLabels: Record<string, string> = {
     title: 'название', description: 'описание', priority: 'приоритет',
@@ -58,7 +60,7 @@ function HistoryAction({ entry }: { entry: HistoryEntry }) {
 }
 
 export default function TaskModal() {
-  const { taskModal, closeTaskModal, updateTask, patchTaskLocal, deleteTask, board } = useBoardStore();
+  const { taskModal, closeTaskModal, updateTask, patchTaskLocal, deleteTask, completeTask, board } = useBoardStore();
   const { user } = useAuthStore();
   const task = taskModal;
 
@@ -185,6 +187,21 @@ export default function TaskModal() {
               <span>Создана {format(new Date(task.created_at), 'd MMM yyyy', { locale: ru })}</span>
               {task.created_by_name && <span>· {task.created_by_name}</span>}
               <div className="flex-1" />
+              {canEdit && (
+                <button
+                  onClick={() => completeTask(task.id, !task.is_completed)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${
+                    task.is_completed
+                      ? 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                      : 'border-green-200 text-green-600 hover:bg-green-50'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {task.is_completed ? 'Вернуть в работу' : 'Выполнено'}
+                </button>
+              )}
               <PriorityBadge priority={task.priority} size="sm" />
               <button onClick={copyLink} title="Скопировать ссылку на задачу" className="text-gray-400 hover:text-brand-600 transition-colors p-1 flex items-center gap-1">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -52,9 +52,11 @@ const COLUMN_COLORS = ['#94a3b8', '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#
 function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: string; myRole: string }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(column.name);
-  const { updateColumn, deleteColumn } = useBoardStore();
+  const { updateColumn, deleteColumn, setCompletedColumn, board } = useBoardStore();
   const [menu, setMenu] = useState(false);
   const canEdit = ['admin', 'manager', 'member'].includes(myRole);
+  const canManage = ['admin', 'manager'].includes(myRole);
+  const isCompletedColumn = board?.completed_column_id === column.id;
 
   const save = async () => {
     if (name.trim() && name !== column.name) {
@@ -117,6 +119,15 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
                   ))}
                 </div>
               </div>
+              {canManage && (
+                <button
+                  onClick={() => { setCompletedColumn(boardId, column.id); setMenu(false); }}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 border-t border-gray-100 mt-1 flex items-center gap-2"
+                >
+                  <span className={`w-2 h-2 rounded-full ${isCompletedColumn ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  {isCompletedColumn ? 'Столбец выполненных ✓' : 'Сделать выполненными'}
+                </button>
+              )}
               <button
                 onClick={() => { if (confirm('Удалить столбец и все задачи?')) deleteColumn(boardId, column.id); setMenu(false); }}
                 className="w-full text-left px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 border-t border-gray-100 mt-1"

@@ -247,6 +247,56 @@ router.patch('/:taskId/hidden-fields', authenticate, async (req: ProjectRequest,
   res.json(await getFullTask(taskId));
 });
 
+// Mark task completed / reopened
+router.patch('/:taskId/complete', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const { completed } = req.body as { completed: boolean };
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  // Find the board of this task
+  const boardRow = await queryOne<{ id: string; completed_column_id: string | null }>(
+    `SELECT b.id, b.completed_column_id FROM tasks t
+     JOIN columns c ON c.id = t.column_id
+     JOIN boards b ON b.id = c.board_id
+     WHERE t.id = $1`,
+    [taskId]
+  );
+  if (!boardRow) return res.status(404).json({ error: 'Board not found' });
+
+  if (completed) {
+    let completedColumnId = boardRow.completed_column_id;
+    // Auto-create "Выполнено" column on first completion
+    if (!completedColumnId) {
+      const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM columns WHERE board_id = $1', [boardRow.id]);
+      const position = parseInt(maxPos?.max || '-1') + 1;
+      const col = await queryOne<any>(
+        'INSERT INTO columns (board_id, name, position, color) VALUES ($1, $2, $3, $4) RETURNING *',
+        [boardRow.id, 'Выполнено', position, '#10b981']
+      );
+      completedColumnId = col!.id;
+      await queryOne('UPDATE boards SET completed_column_id = $1 WHERE id = $2', [completedColumnId, boardRow.id]);
+    }
+    const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM tasks WHERE column_id = $1', [completedColumnId]);
+    const position = parseInt(maxPos?.max || '-1') + 1;
+    await queryOne(
+      'UPDATE tasks SET is_completed = TRUE, completed_at = NOW(), column_id = $1, position = $2, updated_at = NOW() WHERE id = $3',
+      [completedColumnId, position, taskId]
+    );
+    await logHistory(taskId, user.id, 'completed');
+  } else {
+    await queryOne('UPDATE tasks SET is_completed = FALSE, completed_at = NULL, updated_at = NOW() WHERE id = $1', [taskId]);
+    await logHistory(taskId, user.id, 'reopened');
+  }
+  res.json(await getFullTask(taskId));
+});
+
 // Subtasks
 router.post('/:taskId/subtasks', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;

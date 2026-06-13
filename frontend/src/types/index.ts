@@ -100,6 +100,8 @@ export interface Task {
   custom_values?: Record<string, string>;
   hidden_custom_fields?: string[];
   subtasks?: Subtask[];
+  is_completed?: boolean;
+  completed_at?: string | null;
 }
 
 export interface Column {
@@ -114,6 +116,7 @@ export interface Column {
 export interface FullBoard extends Board {
   columns: Column[];
   custom_fields: CustomField[];
+  completed_column_id: string | null;
   my_role: string;
 }
 
