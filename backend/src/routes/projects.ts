@@ -123,6 +123,18 @@ router.post('/:id/members', authenticate, requireProjectAccess, requireProjectRo
 router.patch('/:id/members/:userId', authenticate, requireProjectAccess, requireProjectRole('admin'), async (req: ProjectRequest, res: Response) => {
   const { userId } = req.params;
   const { role } = req.body;
+
+  // Защита: нельзя снять с себя роль администратора, если других админов в проекте нет
+  if (userId === req.user!.id && role !== 'admin') {
+    const others = await queryOne<{ cnt: string }>(
+      "SELECT COUNT(*) as cnt FROM project_members WHERE project_id = $1 AND role = 'admin' AND user_id != $2",
+      [req.projectId, userId]
+    );
+    if (parseInt(others?.cnt || '0') === 0) {
+      return res.status(400).json({ error: 'Нельзя снять с себя роль администратора: в проекте нет других администраторов' });
+    }
+  }
+
   await queryOne(
     'UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3',
     [role, req.projectId, userId]

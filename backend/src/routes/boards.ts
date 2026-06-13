@@ -156,13 +156,22 @@ router.get('/:boardId/access', authenticate, requireProjectAccess, requireProjec
   res.json({ is_restricted: board.is_restricted, member_ids: members.map(m => m.user_id) });
 });
 
-// Add a board member
+// Add a board member (auto-adds to the project as 'member' if not yet a project member)
 router.post('/:boardId/members', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
   const { user_id } = req.body;
-  // user must be a member of the project
+
   const pm = await queryOne('SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2', [req.projectId, user_id]);
-  if (!pm) return res.status(400).json({ error: 'User is not a project member' });
+  if (!pm) {
+    // Должен быть сотрудником той же компании
+    const inCompany = await queryOne('SELECT 1 FROM users WHERE id = $1 AND company_id = $2', [user_id, req.user!.company_id]);
+    if (!inCompany) return res.status(400).json({ error: 'User is not in your company' });
+    // Автодобавление в проект на роль участника
+    await queryOne(
+      "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+      [req.projectId, user_id]
+    );
+  }
   await queryOne('INSERT INTO board_members (board_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [boardId, user_id]);
   res.json({ ok: true });
 });

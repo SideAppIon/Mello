@@ -5,6 +5,7 @@ import { Project, ProjectMember, ROLE_LABELS, TASK_FIELDS } from '../types';
 import Header from '../components/Header';
 import Avatar from '../components/Avatar';
 import Modal from '../components/Modal';
+import { useAuthStore } from '../store/auth';
 
 const PROJECT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6'];
 
@@ -17,6 +18,7 @@ const FIELD_TYPE_LABELS: Record<string, string> = {
 
 export default function ProjectSettings() {
   const { projectId } = useParams<{ projectId: string }>();
+  const currentUser = useAuthStore(s => s.user);
   const [project, setProject] = useState<Project | null>(null);
   const [companyMembers, setCompanyMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,8 +101,13 @@ export default function ProjectSettings() {
 
   const updateMemberRole = async (userId: string, role: string) => {
     if (!projectId) return;
-    await projectsApi.updateMember(projectId, userId, { role });
-    await load();
+    try {
+      await projectsApi.updateMember(projectId, userId, { role });
+      await load();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Не удалось изменить роль');
+      await load();
+    }
   };
 
   const removeMember = async (userId: string) => {
@@ -220,11 +227,14 @@ export default function ProjectSettings() {
               </button>
             </div>
             <div className="divide-y divide-gray-50">
-              {members.map(m => (
+              {members.map(m => {
+                const adminCount = members.filter(x => x.project_role === 'admin').length;
+                const isSelfLastAdmin = m.id === currentUser?.id && m.project_role === 'admin' && adminCount <= 1;
+                return (
                 <div key={m.id} className="flex items-center gap-4 px-6 py-3">
                   <Avatar name={m.full_name} color={m.avatar_color} size="md" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">{m.full_name}</p>
+                    <p className="font-medium text-gray-900">{m.full_name}{m.id === currentUser?.id && <span className="text-xs text-gray-400 ml-1">(вы)</span>}</p>
                     <p className="text-sm text-gray-400">{m.email}</p>
                   </div>
                   <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -233,7 +243,9 @@ export default function ProjectSettings() {
                   <select
                     value={m.project_role}
                     onChange={e => updateMemberRole(m.id, e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    disabled={isSelfLastAdmin}
+                    title={isSelfLastAdmin ? 'Вы единственный администратор проекта — назначьте другого, чтобы сменить свою роль' : undefined}
+                    className="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="admin">Админ</option>
                     <option value="manager">Менеджер</option>
@@ -247,7 +259,8 @@ export default function ProjectSettings() {
                     ✕
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
