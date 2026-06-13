@@ -11,6 +11,7 @@ import Header from '../components/Header';
 import BoardColumn from '../components/BoardColumn';
 import TaskModal from '../components/TaskModal';
 import BoardAccessModal from '../components/BoardAccessModal';
+import Modal from '../components/Modal';
 import { Task, Column } from '../types';
 import TaskCard from '../components/TaskCard';
 
@@ -43,7 +44,10 @@ export const COLUMN_STYLES: { key: string; label: string }[] = [
   { key: 'cards', label: 'Карточки' },
   { key: 'minimal', label: 'Минимал' },
   { key: 'glass', label: 'Стекло' },
+  { key: 'solid', label: 'Сплошной' },
+  { key: 'shadow', label: 'Тень' },
   { key: 'divider', label: 'Палочки' },
+  { key: 'dashed', label: 'Пунктир' },
 ];
 
 export function getBackground(key: string) {
@@ -52,6 +56,14 @@ export function getBackground(key: string) {
 
 export function getBackgroundCss(key: string): string {
   return getBackground(key).css;
+}
+
+function CheckMark() {
+  return (
+    <svg className="w-4 h-4 text-brand-500 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+  );
 }
 
 export default function BoardPage() {
@@ -63,7 +75,8 @@ export default function BoardPage() {
   const [colName, setColName] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [onlyMine, setOnlyMine] = useState(false);
-  const [styleMenu, setStyleMenu] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const currentUser = useAuthStore(s => s.user);
 
@@ -231,80 +244,70 @@ export default function BoardPage() {
           <span className="text-gray-700 font-semibold">{board.name}</span>
         </div>
         <div className="flex-1" />
-        <button
-          onClick={toggleCompleted}
-          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
-            showCompleted ? 'bg-green-500 text-white border-green-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {showCompleted ? 'Скрыть выполненные' : 'Показать выполненные'}
-        </button>
-        {['admin', 'manager'].includes(myRole) && (
+        {/* Активные фильтры — компактные индикаторы */}
+        {onlyMine && <span className="text-xs text-brand-600 bg-brand-50 px-2 py-1 rounded-lg">Только мои</span>}
+        {showCompleted && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-lg">С выполненными</span>}
+        <div className="relative">
           <button
-            onClick={() => setAccessOpen(true)}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border text-gray-600 border-gray-200 hover:bg-gray-50 transition-colors"
+            onClick={() => setMenuOpen(v => !v)}
+            className="p-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Меню доски"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 7a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 7a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
             </svg>
-            Доступ
           </button>
-        )}
-        {['admin', 'manager'].includes(myRole) && (
-          <div className="relative">
-            <button
-              onClick={() => setStyleMenu(v => !v)}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border text-gray-600 border-gray-200 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-              </svg>
-              Оформление
-            </button>
-            {styleMenu && (
-              <div className="absolute right-0 top-10 bg-white rounded-2xl shadow-xl border border-gray-100 p-4 w-64 z-30">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Фон доски</div>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {BOARD_BACKGROUNDS.map(bg => (
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-11 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 w-60 z-30">
+                <button
+                  onClick={() => { setOnlyMine(v => !v); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Только мои задачи
+                  {onlyMine && <CheckMark />}
+                </button>
+                <button
+                  onClick={() => { toggleCompleted(); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Показывать выполненные
+                  {showCompleted && <CheckMark />}
+                </button>
+                {['admin', 'manager'].includes(myRole) && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
                     <button
-                      key={bg.key}
-                      onClick={() => setBoardStyle(board.id, { background: bg.key })}
-                      title={bg.label}
-                      className={`h-10 rounded-lg border-2 transition-transform hover:scale-105 ${board.background === bg.key ? 'border-brand-500' : 'border-transparent ring-1 ring-gray-200'}`}
-                      style={{ background: bg.css }}
-                    />
-                  ))}
-                </div>
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Стиль столбцов</div>
-                <div className="flex gap-2">
-                  {COLUMN_STYLES.map(cs => (
-                    <button
-                      key={cs.key}
-                      onClick={() => setBoardStyle(board.id, { column_style: cs.key })}
-                      className={`flex-1 text-xs py-2 rounded-lg border transition-colors ${board.column_style === cs.key ? 'bg-brand-500 text-white border-brand-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                      onClick={() => { setStyleOpen(true); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
-                      {cs.label}
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                      </svg>
+                      Оформление
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => { setAccessOpen(true); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Доступ к доске
+                    </button>
+                  </>
+                )}
               </div>
-            )}
-          </div>
-        )}
-        <button
-          onClick={() => setOnlyMine(v => !v)}
-          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
-            onlyMine ? 'bg-brand-500 text-white border-brand-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          Только мои задачи
-        </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Kanban board */}
@@ -372,6 +375,36 @@ export default function BoardPage() {
       {taskModal && <TaskModal />}
       {accessOpen && projectId && boardId && (
         <BoardAccessModal projectId={projectId} boardId={boardId} onClose={() => setAccessOpen(false)} />
+      )}
+      {styleOpen && (
+        <Modal onClose={() => setStyleOpen(false)} title="Оформление доски" size="sm">
+          <div className="p-6">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Фон доски</div>
+            <div className="grid grid-cols-5 gap-2 mb-5">
+              {BOARD_BACKGROUNDS.map(bg => (
+                <button
+                  key={bg.key}
+                  onClick={() => setBoardStyle(board.id, { background: bg.key })}
+                  title={bg.label}
+                  className={`h-10 rounded-lg border-2 transition-transform hover:scale-105 ${board.background === bg.key ? 'border-brand-500' : 'border-transparent ring-1 ring-gray-200'}`}
+                  style={{ background: bg.css }}
+                />
+              ))}
+            </div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Стиль столбцов</div>
+            <div className="grid grid-cols-3 gap-2">
+              {COLUMN_STYLES.map(cs => (
+                <button
+                  key={cs.key}
+                  onClick={() => setBoardStyle(board.id, { column_style: cs.key })}
+                  className={`text-xs py-2 rounded-lg border transition-colors ${board.column_style === cs.key ? 'bg-brand-500 text-white border-brand-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                >
+                  {cs.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

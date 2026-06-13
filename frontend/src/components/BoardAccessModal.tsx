@@ -60,8 +60,8 @@ export default function BoardAccessModal({ projectId, boardId, onClose }: Props)
           <>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-gray-900">Ограничить доступ</p>
-                <p className="text-sm text-gray-400">Только выбранные увидят доску</p>
+                <p className="font-medium text-gray-900">Выдавать доступ вручную</p>
+                <p className="text-sm text-gray-400">{isRestricted ? 'Доску видят только те, кому выдан доступ' : 'Сейчас доску видят все участники проекта'}</p>
               </div>
               <button
                 onClick={toggleRestricted}
@@ -70,6 +70,10 @@ export default function BoardAccessModal({ projectId, boardId, onClose }: Props)
                 <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${isRestricted ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
+
+            {isRestricted && (
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Кому выдан доступ</p>
+            )}
 
             {isRestricted && (
               <div className="border-t border-gray-100 pt-3 space-y-1 max-h-72 overflow-y-auto">

@@ -35,6 +35,7 @@ body {
 /* Столбцы */
 .board-dark .mello-col.bg-gray-50 { background-color: rgba(30, 41, 59, 0.6) !important; }
 .board-dark .mello-col.bg-white\/60 { background-color: rgba(30, 41, 59, 0.45) !important; border-color: rgba(148,163,184,0.2) !important; }
+.board-dark .mello-col.bg-white { background-color: rgba(30, 41, 59, 0.7) !important; border-color: rgba(148,163,184,0.25) !important; }
 .board-dark .mello-col { border-color: rgba(148, 163, 184, 0.25) !important; }
 .board-dark .mello-col .text-gray-700 { color: #e2e8f0 !important; }
 .board-dark .mello-col .text-gray-500 { color: #cbd5e1 !important; }

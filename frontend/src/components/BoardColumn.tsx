@@ -17,7 +17,10 @@ const COLUMN_STYLE_CLASSES: Record<string, string> = {
   cards: 'bg-gray-50 rounded-2xl p-3',
   minimal: 'bg-transparent border-t-2 pt-3 px-1',
   glass: 'bg-white/60 backdrop-blur-sm rounded-2xl p-3 border border-white/40 shadow-sm',
+  solid: 'bg-white rounded-2xl p-3 border border-gray-200',
+  shadow: 'bg-white rounded-2xl p-3 shadow-md',
   divider: 'bg-transparent px-3 border-l border-gray-300/50',
+  dashed: 'bg-transparent px-3 border-l-2 border-dashed border-gray-300/60',
 };
 
 function AddTaskForm({ columnId, onDone }: { columnId: string; onDone: () => void }) {
