@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Task, Comment, HistoryEntry, PRIORITY_LABELS, ROLE_LABELS, Tag, CustomField, Subtask } from '../types';
 import { tasksApi } from '../api/client';
 import { useBoardStore } from '../store/board';
@@ -68,6 +68,9 @@ export default function TaskModal() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [commentFile, setCommentFile] = useState<File | null>(null);
+  const [sendingComment, setSendingComment] = useState(false);
+  const commentFileRef = useRef<HTMLInputElement>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<any>({});
   const [newTag, setNewTag] = useState({ name: '', color: TAG_COLORS[0] });
@@ -114,10 +117,28 @@ export default function TaskModal() {
   };
 
   const submitComment = async () => {
-    if (!newComment.trim()) return;
-    const c = await tasksApi.addComment(task.id, newComment.trim());
-    setComments(prev => [...prev, c]);
-    setNewComment('');
+    if (!newComment.trim() && !commentFile) return;
+    setSendingComment(true);
+    try {
+      const c = await tasksApi.addComment(task.id, newComment.trim(), !!commentFile);
+      if (commentFile) await tasksApi.uploadAttachment(task.id, commentFile, c.id);
+      const fresh = await tasksApi.getComments(task.id);
+      setComments(fresh);
+      setNewComment('');
+      setCommentFile(null);
+    } catch {
+      alert('Не удалось отправить комментарий');
+    } finally {
+      setSendingComment(false);
+    }
+  };
+
+  const onCommentPaste = (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+    if (item) {
+      const file = item.getAsFile();
+      if (file) { setCommentFile(file); e.preventDefault(); }
+    }
   };
 
   const addTag = async () => {
@@ -311,6 +332,9 @@ export default function TaskModal() {
 
                 {/* Subtasks */}
                 <SubtasksSection task={task} canEdit={canEdit} />
+
+                {/* Attachments */}
+                <AttachmentsSection task={task} canEdit={canEdit} />
               </div>
             )}
 
@@ -324,7 +348,22 @@ export default function TaskModal() {
                         <span className="text-sm font-medium text-gray-800">{c.full_name}</span>
                         <span className="text-xs text-gray-400">{format(new Date(c.created_at), 'd MMM, HH:mm', { locale: ru })}</span>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1 bg-gray-50 rounded-xl px-3 py-2">{c.content}</p>
+                      {c.content && <p className="text-sm text-gray-600 mt-1 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap">{c.content}</p>}
+                      {c.attachments && c.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-1.5">
+                          {c.attachments.map(a => (
+                            isImage(a.content_type) ? (
+                              <a key={a.id} href={a.url} target="_blank" rel="noreferrer">
+                                <img src={a.url} alt={a.file_name} className="max-h-40 rounded-lg border border-gray-100" />
+                              </a>
+                            ) : (
+                              <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1">
+                                📎 {a.file_name}
+                              </a>
+                            )
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -337,17 +376,34 @@ export default function TaskModal() {
                     <textarea
                       value={newComment}
                       onChange={e => setNewComment(e.target.value)}
-                      placeholder="Написать комментарий..."
+                      onPaste={onCommentPaste}
+                      placeholder="Написать комментарий... (можно вставить скриншот)"
                       className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none"
                       rows={2}
                     />
-                    <div className="flex justify-end mt-1">
+                    {commentFile && (
+                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 bg-gray-50 rounded-lg px-2 py-1 w-fit">
+                        📎 {commentFile.name || 'скриншот.png'}
+                        <button onClick={() => setCommentFile(null)} className="text-gray-400 hover:text-red-500">×</button>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center mt-1">
+                      <input ref={commentFileRef} type="file" accept="image/*" className="hidden" onChange={e => setCommentFile(e.target.files?.[0] || null)} />
+                      <button
+                        onClick={() => commentFileRef.current?.click()}
+                        className="text-xs text-gray-400 hover:text-brand-600 flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                        Картинка
+                      </button>
                       <button
                         onClick={submitComment}
-                        disabled={!newComment.trim()}
+                        disabled={sendingComment || (!newComment.trim() && !commentFile)}
                         className="text-xs bg-brand-500 text-white px-4 py-1.5 rounded-lg hover:bg-brand-600 disabled:opacity-40 transition-colors"
                       >
-                        Отправить
+                        {sendingComment ? 'Отправка...' : 'Отправить'}
                       </button>
                     </div>
                   </div>
@@ -460,6 +516,85 @@ export default function TaskModal() {
   );
 }
 
+function isImage(ct: string | null | undefined) { return !!ct && ct.startsWith('image/'); }
+
+function AttachmentsSection({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { patchTaskLocal } = useBoardStore();
+  const attachments = task.attachments ?? [];
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFiles = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    setUploading(true);
+    try {
+      const added = [];
+      for (const f of Array.from(files)) {
+        added.push(await tasksApi.uploadAttachment(task.id, f));
+      }
+      patchTaskLocal(task.id, { attachments: [...attachments, ...added] });
+    } catch {
+      alert('Не удалось загрузить файл. Проверьте, что хранилище настроено.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const remove = async (id: string) => {
+    patchTaskLocal(task.id, { attachments: attachments.filter(a => a.id !== id) });
+    await tasksApi.deleteAttachment(task.id, id);
+  };
+
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Вложения</label>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {attachments.map(a => (
+          <div key={a.id} className="relative group border border-gray-100 rounded-lg overflow-hidden bg-gray-50">
+            {isImage(a.content_type) ? (
+              <a href={a.url} target="_blank" rel="noreferrer">
+                <img src={a.url} alt={a.file_name} className="w-full h-24 object-cover" />
+              </a>
+            ) : (
+              <a href={a.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 text-sm text-gray-700 hover:text-brand-600">
+                <svg className="w-5 h-5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                <span className="truncate">{a.file_name}</span>
+              </a>
+            )}
+            {canEdit && (
+              <button
+                onClick={() => remove(a.id)}
+                className="absolute top-1 right-1 bg-white/90 rounded-full w-5 h-5 flex items-center justify-center text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                title="Удалить вложение"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canEdit && (
+        <>
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={e => onFiles(e.target.files)} />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="mt-2 text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1 disabled:opacity-50"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            {uploading ? 'Загрузка...' : 'Прикрепить файл'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function SubtasksSection({ task, canEdit }: { task: Task; canEdit: boolean }) {
   const { patchTaskLocal } = useBoardStore();
   const subtasks = task.subtasks ?? [];
@@ -511,7 +646,7 @@ function SubtasksSection({ task, canEdit }: { task: Task; canEdit: boolean }) {
             </button>
             <span className={`flex-1 text-sm ${sub.is_done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{sub.title}</span>
             {canEdit && (
-              <button onClick={() => remove(sub.id)} className="text-gray-300 hover:text-red-400 text-sm opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+              <button onClick={() => remove(sub.id)} title="Удалить подзадачу" className="text-gray-400 hover:text-red-500 text-base leading-none px-1">×</button>
             )}
           </div>
         ))}

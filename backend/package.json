@@ -12,6 +12,8 @@
     "package": "npm run build && node scripts/package.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.540.0",
+    "@aws-sdk/s3-request-presigner": "^3.540.0",
     "bcryptjs": "^2.4.3",
     "serverless-http": "^3.2.0",
     "cors": "^2.8.5",

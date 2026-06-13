@@ -97,7 +97,7 @@ export const tasksApi = {
   addAssignee: (taskId: string, user_id: string) => api.post(`/tasks/${taskId}/assignees`, { user_id }).then(r => r.data),
   removeAssignee: (taskId: string, userId: string) => api.delete(`/tasks/${taskId}/assignees/${userId}`).then(r => r.data),
   getComments: (taskId: string) => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
-  addComment: (taskId: string, content: string) => api.post(`/tasks/${taskId}/comments`, { content }).then(r => r.data),
+  addComment: (taskId: string, content: string, allowEmpty = false) => api.post(`/tasks/${taskId}/comments`, { content, allow_empty: allowEmpty }).then(r => r.data),
   updateComment: (taskId: string, commentId: string, content: string) => api.patch(`/tasks/${taskId}/comments/${commentId}`, { content }).then(r => r.data),
   deleteComment: (taskId: string, commentId: string) => api.delete(`/tasks/${taskId}/comments/${commentId}`).then(r => r.data),
   getHistory: (taskId: string) => api.get(`/tasks/${taskId}/history`).then(r => r.data),
@@ -113,4 +113,19 @@ export const tasksApi = {
     api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`).then(r => r.data),
   complete: (taskId: string, completed: boolean) =>
     api.patch(`/tasks/${taskId}/complete`, { completed }).then(r => r.data),
+  listAttachments: (taskId: string) => api.get(`/tasks/${taskId}/attachments`).then(r => r.data),
+  deleteAttachment: (taskId: string, attachmentId: string) =>
+    api.delete(`/tasks/${taskId}/attachments/${attachmentId}`).then(r => r.data),
+  // Полный цикл загрузки: presign → PUT в хранилище → запись метаданных
+  uploadAttachment: async (taskId: string, file: File, commentId?: string) => {
+    const ct = file.type || 'application/octet-stream';
+    const { upload_url, key, url } = await api
+      .post(`/tasks/${taskId}/attachments/presign`, { file_name: file.name, content_type: ct })
+      .then(r => r.data);
+    const putRes = await fetch(upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': ct } });
+    if (!putRes.ok) throw new Error('Upload failed');
+    return api.post(`/tasks/${taskId}/attachments`, {
+      file_name: file.name, file_key: key, url, content_type: ct, size: file.size, comment_id: commentId || undefined,
+    }).then(r => r.data);
+  },
 };

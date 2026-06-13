@@ -71,6 +71,19 @@ export interface Tag {
   color: string;
 }
 
+export interface Attachment {
+  id: string;
+  task_id: string;
+  comment_id: string | null;
+  file_name: string;
+  file_key: string;
+  url: string;
+  content_type: string | null;
+  size: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export interface Subtask {
   id: string;
   task_id: string;
@@ -100,6 +113,8 @@ export interface Task {
   custom_values?: Record<string, string>;
   hidden_custom_fields?: string[];
   subtasks?: Subtask[];
+  attachments?: Attachment[];
+  attachment_count?: number;
   is_completed?: boolean;
   completed_at?: string | null;
 }
@@ -131,6 +146,7 @@ export interface Comment {
   content: string;
   created_at: string;
   updated_at: string;
+  attachments?: Attachment[];
 }
 
 export interface HistoryEntry {

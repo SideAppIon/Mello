@@ -156,6 +156,21 @@ CREATE TABLE IF NOT EXISTS board_members (
   PRIMARY KEY (board_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS attachments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  comment_id UUID REFERENCES task_comments(id) ON DELETE CASCADE,
+  file_name VARCHAR(512) NOT NULL,
+  file_key VARCHAR(1024) NOT NULL,
+  url TEXT NOT NULL,
+  content_type VARCHAR(128),
+  size BIGINT,
+  uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_comment ON attachments(comment_id);
+
 CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(column_id);

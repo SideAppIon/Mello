@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { query, queryOne } from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
+import { presignUpload, publicUrl, deleteObject, safeName } from '../lib/s3';
 
 const router = Router({ mergeParams: true });
 
@@ -39,6 +41,7 @@ async function getFullTask(taskId: string) {
             COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color, 'email', u.email)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
             COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
             COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks,
+            COALESCE((SELECT json_agg(a ORDER BY a.created_at) FROM attachments a WHERE a.task_id = t.id AND a.comment_id IS NULL), '[]') as attachments,
             ub.full_name as created_by_name
      FROM tasks t
      LEFT JOIN task_tags tt ON tt.task_id = t.id
@@ -314,6 +317,79 @@ router.patch('/:taskId/complete', authenticate, async (req: ProjectRequest, res:
   res.json(await getFullTask(taskId));
 });
 
+// Attachments — presign an upload URL (direct browser → Object Storage)
+router.post('/:taskId/attachments/presign', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const { file_name, content_type } = req.body;
+  if (!file_name) return res.status(400).json({ error: 'file_name required' });
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  const key = `attachments/${taskId}/${randomUUID()}-${safeName(file_name)}`;
+  const ct = content_type || 'application/octet-stream';
+  try {
+    const upload_url = await presignUpload(key, ct);
+    res.json({ upload_url, key, url: publicUrl(key), content_type: ct });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Storage not configured: ' + (e?.message || 'unknown') });
+  }
+});
+
+// Attachments — record metadata after a successful upload
+router.post('/:taskId/attachments', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const { file_name, file_key, url, content_type, size, comment_id } = req.body;
+  if (!file_name || !file_key || !url) return res.status(400).json({ error: 'file_name, file_key, url required' });
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  const att = await queryOne<any>(
+    `INSERT INTO attachments (task_id, comment_id, file_name, file_key, url, content_type, size, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [taskId, comment_id || null, file_name, file_key, url, content_type || null, size || null, user.id]
+  );
+  res.status(201).json(att);
+});
+
+// Attachments — list (task-level)
+router.get('/:taskId/attachments', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId } = req.params;
+  const list = await query<any>(
+    'SELECT * FROM attachments WHERE task_id = $1 AND comment_id IS NULL ORDER BY created_at ASC',
+    [taskId]
+  );
+  res.json(list);
+});
+
+// Attachments — delete
+router.delete('/:taskId/attachments/:attachmentId', authenticate, async (req: ProjectRequest, res: Response) => {
+  const { taskId, attachmentId } = req.params;
+  const projectId = await getTaskProjectId(taskId);
+  if (!projectId) return res.status(404).json({ error: 'Task not found' });
+
+  const user = (req as AuthRequest).user!;
+  if (user.role !== 'admin') {
+    const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
+    if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
+  }
+
+  const att = await queryOne<any>('DELETE FROM attachments WHERE id = $1 AND task_id = $2 RETURNING file_key', [attachmentId, taskId]);
+  if (att) await deleteObject(att.file_key);
+  res.json({ ok: true });
+});
+
 // Subtasks
 router.post('/:taskId/subtasks', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;
@@ -449,7 +525,9 @@ router.delete('/:taskId/assignees/:userId', authenticate, async (req: ProjectReq
 router.get('/:taskId/comments', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;
   const comments = await query<any>(
-    `SELECT tc.*, u.full_name, u.avatar_color FROM task_comments tc
+    `SELECT tc.*, u.full_name, u.avatar_color,
+            COALESCE((SELECT json_agg(a ORDER BY a.created_at) FROM attachments a WHERE a.comment_id = tc.id), '[]') as attachments
+     FROM task_comments tc
      JOIN users u ON u.id = tc.user_id
      WHERE tc.task_id = $1 ORDER BY tc.created_at ASC`,
     [taskId]
@@ -459,15 +537,15 @@ router.get('/:taskId/comments', authenticate, async (req: ProjectRequest, res: R
 
 router.post('/:taskId/comments', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;
-  const { content } = req.body;
-  if (!content) return res.status(400).json({ error: 'Content required' });
+  const { content, allow_empty } = req.body;
+  if (!content && !allow_empty) return res.status(400).json({ error: 'Content required' });
 
   const user = (req as AuthRequest).user!;
   const comment = await queryOne<any>(
     `INSERT INTO task_comments (task_id, user_id, content) VALUES ($1, $2, $3)
      RETURNING *, (SELECT full_name FROM users WHERE id = $2) as full_name,
                  (SELECT avatar_color FROM users WHERE id = $2) as avatar_color`,
-    [taskId, user.id, content]
+    [taskId, user.id, content || '']
   );
   await logHistory(taskId, user.id, 'comment_added');
   res.status(201).json(comment);
