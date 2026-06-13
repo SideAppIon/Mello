@@ -112,7 +112,8 @@ router.patch('/:taskId', authenticate, async (req: ProjectRequest, res: Response
   if (!projectId) return res.status(404).json({ error: 'Task not found' });
 
   const user = (req as AuthRequest).user!;
-  let memberRole = 'member';
+  // Привилегированная роль (админ компании или админ проекта) обходит ограничения по полям
+  let memberRole = 'admin';
   if (user.role !== 'admin') {
     const member = await queryOne<{ role: string }>('SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2', [projectId, user.id]);
     if (!member) return res.status(403).json({ error: 'No access' });
@@ -123,12 +124,15 @@ router.patch('/:taskId', authenticate, async (req: ProjectRequest, res: Response
   const oldTask = await queryOne<any>('SELECT * FROM tasks WHERE id = $1', [taskId]);
   if (!oldTask) return res.status(404).json({ error: 'Task not found' });
 
-  // Check field permissions
-  const perms = await query<any>(
-    'SELECT field_name, can_edit FROM project_field_permissions WHERE project_id = $1 AND role = $2',
-    [projectId, memberRole]
-  );
-  const restrictedFields = new Set(perms.filter((p: any) => !p.can_edit).map((p: any) => p.field_name));
+  // Ограничения по полям применяются только к не-админам
+  const restrictedFields = new Set<string>();
+  if (memberRole !== 'admin') {
+    const perms = await query<any>(
+      'SELECT field_name, can_edit FROM project_field_permissions WHERE project_id = $1 AND role = $2',
+      [projectId, memberRole]
+    );
+    perms.filter((p: any) => !p.can_edit).forEach((p: any) => restrictedFields.add(p.field_name));
+  }
 
   const fields: Record<string, any> = {};
   const allowed = ['title', 'description', 'priority', 'deadline', 'estimated_hours'];

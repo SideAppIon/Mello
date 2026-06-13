@@ -6,6 +6,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useBoardStore } from '../store/board';
+import { useAuthStore } from '../store/auth';
 import Header from '../components/Header';
 import BoardColumn from '../components/BoardColumn';
 import TaskModal from '../components/TaskModal';
@@ -19,6 +20,8 @@ export default function BoardPage() {
   const [addingColumn, setAddingColumn] = useState(false);
   const [colName, setColName] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [onlyMine, setOnlyMine] = useState(false);
+  const currentUser = useAuthStore(s => s.user);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -140,6 +143,13 @@ export default function BoardPage() {
 
   const myRole = board?.my_role || 'viewer';
 
+  const displayColumns = (board && onlyMine && currentUser)
+    ? board.columns.map(col => ({
+        ...col,
+        tasks: col.tasks.filter(t => t.assignees.some(a => a.id === currentUser.id)),
+      }))
+    : board?.columns || [];
+
   if (loading || !board) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -164,6 +174,18 @@ export default function BoardPage() {
           <span>/</span>
           <span className="text-gray-700 font-semibold">{board.name}</span>
         </div>
+        <div className="flex-1" />
+        <button
+          onClick={() => setOnlyMine(v => !v)}
+          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
+            onlyMine ? 'bg-brand-500 text-white border-brand-500' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Только мои задачи
+        </button>
       </div>
 
       {/* Kanban board */}
@@ -180,7 +202,7 @@ export default function BoardPage() {
               items={board.columns.map(c => `col-${c.id}`)}
               strategy={horizontalListSortingStrategy}
             >
-              {board.columns.map(col => (
+              {displayColumns.map(col => (
                 <BoardColumn key={col.id} column={col} projectId={projectId!} myRole={myRole} />
               ))}
             </SortableContext>

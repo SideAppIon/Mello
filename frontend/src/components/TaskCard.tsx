@@ -62,8 +62,8 @@ export default function TaskCard({ task }: Props) {
         {task.title}
       </p>
 
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <PriorityBadge priority={task.priority} />
           {deadlineDate && (
             <span className={`text-xs flex items-center gap-1 ${deadlineOverdue ? 'text-red-500' : deadlineToday ? 'text-amber-500' : 'text-gray-400'}`}>
