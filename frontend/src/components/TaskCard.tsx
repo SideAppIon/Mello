@@ -35,7 +35,7 @@ export default function TaskCard({ task }: Props) {
       {...attributes}
       {...listeners}
       onClick={() => openTaskModal(task)}
-      className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-brand-500/30 transition-all cursor-pointer p-3 group"
+      className="mello-card bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-brand-500/30 transition-all cursor-pointer p-3 group"
     >
       {/* Priority strip */}
       <div

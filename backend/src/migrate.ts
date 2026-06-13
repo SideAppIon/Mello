@@ -148,6 +148,13 @@ ALTER TABLE boards ADD COLUMN IF NOT EXISTS completed_column_id UUID REFERENCES 
 CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(column_id, is_completed);
 ALTER TABLE boards ADD COLUMN IF NOT EXISTS background VARCHAR(64) NOT NULL DEFAULT 'default';
 ALTER TABLE boards ADD COLUMN IF NOT EXISTS column_style VARCHAR(32) NOT NULL DEFAULT 'cards';
+ALTER TABLE boards ADD COLUMN IF NOT EXISTS is_restricted BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS board_members (
+  board_id UUID NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (board_id, user_id)
+);
 
 CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON project_custom_fields(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_task ON task_custom_values(task_id);

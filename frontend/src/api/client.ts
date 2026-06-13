@@ -68,10 +68,13 @@ export const projectsApi = {
 export const boardsApi = {
   list: (projectId: string) => api.get(`/projects/${projectId}/boards`).then(r => r.data),
   create: (projectId: string, name: string) => api.post(`/projects/${projectId}/boards`, { name }).then(r => r.data),
-  update: (projectId: string, boardId: string, data: { name?: string; completed_column_id?: string | null; background?: string; column_style?: string }) => api.patch(`/projects/${projectId}/boards/${boardId}`, data).then(r => r.data),
+  update: (projectId: string, boardId: string, data: { name?: string; completed_column_id?: string | null; background?: string; column_style?: string; is_restricted?: boolean }) => api.patch(`/projects/${projectId}/boards/${boardId}`, data).then(r => r.data),
   delete: (projectId: string, boardId: string) => api.delete(`/projects/${projectId}/boards/${boardId}`).then(r => r.data),
   getFull: (projectId: string, boardId: string) => api.get(`/projects/${projectId}/boards/${boardId}/full`).then(r => r.data),
   getCompleted: (projectId: string, boardId: string) => api.get(`/projects/${projectId}/boards/${boardId}/completed`).then(r => r.data),
+  getAccess: (projectId: string, boardId: string) => api.get(`/projects/${projectId}/boards/${boardId}/access`).then(r => r.data),
+  addMember: (projectId: string, boardId: string, user_id: string) => api.post(`/projects/${projectId}/boards/${boardId}/members`, { user_id }).then(r => r.data),
+  removeMember: (projectId: string, boardId: string, userId: string) => api.delete(`/projects/${projectId}/boards/${boardId}/members/${userId}`).then(r => r.data),
 };
 
 // Columns

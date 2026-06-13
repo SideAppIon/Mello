@@ -10,28 +10,48 @@ import { useAuthStore } from '../store/auth';
 import Header from '../components/Header';
 import BoardColumn from '../components/BoardColumn';
 import TaskModal from '../components/TaskModal';
+import BoardAccessModal from '../components/BoardAccessModal';
 import { Task, Column } from '../types';
 import TaskCard from '../components/TaskCard';
 
 export const BOARD_BACKGROUNDS: { key: string; label: string; css: string; dark?: boolean }[] = [
+  // Светлые однотонные
   { key: 'default', label: 'Светлый', css: '#f9fafb' },
   { key: 'white', label: 'Белый', css: '#ffffff' },
+  { key: 'slate', label: 'Сланец', css: '#f1f5f9' },
+  { key: 'stone', label: 'Камень', css: '#f5f5f4' },
+  // Светлые градиенты
   { key: 'mint', label: 'Мята', css: 'linear-gradient(135deg, #d1fae5, #f0fdfa)' },
   { key: 'sky', label: 'Небо', css: 'linear-gradient(135deg, #dbeafe, #eff6ff)' },
   { key: 'peach', label: 'Персик', css: 'linear-gradient(135deg, #fef3c7, #ffe4e6)' },
   { key: 'lavender', label: 'Лаванда', css: 'linear-gradient(135deg, #ede9fe, #fae8ff)' },
+  { key: 'rose', label: 'Роза', css: 'linear-gradient(135deg, #ffe4e6, #fce7f3)' },
+  { key: 'lime', label: 'Лайм', css: 'linear-gradient(135deg, #ecfccb, #d9f99d)' },
+  { key: 'sunset', label: 'Закат', css: 'linear-gradient(135deg, #fed7aa, #fecaca, #ddd6fe)' },
+  { key: 'aurora', label: 'Аврора', css: 'linear-gradient(135deg, #a7f3d0, #93c5fd, #c4b5fd)' },
+  // Яркие (тёмный текст не подходит → dark)
   { key: 'ocean', label: 'Океан', css: 'linear-gradient(135deg, #38bdf8, #6366f1)', dark: true },
+  { key: 'grape', label: 'Виноград', css: 'linear-gradient(135deg, #7c3aed, #db2777)', dark: true },
+  // Тёмная тема
   { key: 'graphite', label: 'Графит', css: 'linear-gradient(135deg, #1f2937, #374151)', dark: true },
+  { key: 'midnight', label: 'Полночь', css: '#0f172a', dark: true },
+  { key: 'carbon', label: 'Карбон', css: 'linear-gradient(135deg, #111827, #1e293b)', dark: true },
+  { key: 'deepsea', label: 'Глубина', css: 'linear-gradient(160deg, #0f172a, #134e4a)', dark: true },
 ];
 
 export const COLUMN_STYLES: { key: string; label: string }[] = [
   { key: 'cards', label: 'Карточки' },
   { key: 'minimal', label: 'Минимал' },
   { key: 'glass', label: 'Стекло' },
+  { key: 'divider', label: 'Палочки' },
 ];
 
+export function getBackground(key: string) {
+  return BOARD_BACKGROUNDS.find(b => b.key === key) || BOARD_BACKGROUNDS[0];
+}
+
 export function getBackgroundCss(key: string): string {
-  return (BOARD_BACKGROUNDS.find(b => b.key === key) || BOARD_BACKGROUNDS[0]).css;
+  return getBackground(key).css;
 }
 
 export default function BoardPage() {
@@ -44,6 +64,7 @@ export default function BoardPage() {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [styleMenu, setStyleMenu] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const currentUser = useAuthStore(s => s.user);
 
   const sensors = useSensors(
@@ -222,6 +243,17 @@ export default function BoardPage() {
           {showCompleted ? 'Скрыть выполненные' : 'Показать выполненные'}
         </button>
         {['admin', 'manager'].includes(myRole) && (
+          <button
+            onClick={() => setAccessOpen(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border text-gray-600 border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Доступ
+          </button>
+        )}
+        {['admin', 'manager'].includes(myRole) && (
           <div className="relative">
             <button
               onClick={() => setStyleMenu(v => !v)}
@@ -276,7 +308,7 @@ export default function BoardPage() {
       </div>
 
       {/* Kanban board */}
-      <div className="flex-1 overflow-x-auto" style={{ background: getBackgroundCss(board.background) }}>
+      <div className={`flex-1 overflow-x-auto ${getBackground(board.background).dark ? 'board-dark' : ''}`} style={{ background: getBackgroundCss(board.background) }}>
         <div className="p-6 flex gap-4 min-w-max min-h-full items-start">
           <DndContext
             sensors={sensors}
@@ -338,6 +370,9 @@ export default function BoardPage() {
       </div>
 
       {taskModal && <TaskModal />}
+      {accessOpen && projectId && boardId && (
+        <BoardAccessModal projectId={projectId} boardId={boardId} onClose={() => setAccessOpen(false)} />
+      )}
     </div>
   );
 }

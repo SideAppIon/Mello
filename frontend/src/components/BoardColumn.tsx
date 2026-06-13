@@ -17,6 +17,7 @@ const COLUMN_STYLE_CLASSES: Record<string, string> = {
   cards: 'bg-gray-50 rounded-2xl p-3',
   minimal: 'bg-transparent border-t-2 pt-3 px-1',
   glass: 'bg-white/60 backdrop-blur-sm rounded-2xl p-3 border border-white/40 shadow-sm',
+  divider: 'bg-transparent px-3 border-l border-gray-300/50',
 };
 
 function AddTaskForm({ columnId, onDone }: { columnId: string; onDone: () => void }) {
@@ -173,7 +174,7 @@ export default function BoardColumn({ column, projectId, myRole, columnStyle = '
       className="flex-shrink-0 w-72 flex flex-col"
     >
       <div
-        className={`${COLUMN_STYLE_CLASSES[columnStyle] || COLUMN_STYLE_CLASSES.cards} flex flex-col h-full transition-colors ${isOver ? 'ring-2 ring-brand-500/40' : ''}`}
+        className={`mello-col ${COLUMN_STYLE_CLASSES[columnStyle] || COLUMN_STYLE_CLASSES.cards} flex flex-col h-full transition-colors ${isOver ? 'ring-2 ring-brand-500/40' : ''}`}
         style={columnStyle === 'minimal' ? { borderTopColor: column.color } : undefined}
         ref={dropRef}
       >

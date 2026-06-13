@@ -5,12 +5,29 @@ import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../mid
 
 const router = Router({ mergeParams: true });
 
+// Доступ к доске: админ/менеджер проекта — всегда; иначе — если доска не ограничена
+// или пользователь явно добавлен в участники доски.
+async function canAccessBoard(board: any, role: string, userId: string): Promise<boolean> {
+  if (role === 'admin' || role === 'manager') return true;
+  if (!board.is_restricted) return true;
+  const m = await queryOne('SELECT 1 FROM board_members WHERE board_id = $1 AND user_id = $2', [board.id, userId]);
+  return !!m;
+}
+
 router.get('/', authenticate, requireProjectAccess, async (req: ProjectRequest, res: Response) => {
+  const role = req.projectMember!.role;
+  const userId = req.user!.id;
   const boards = await query<any>(
     'SELECT * FROM boards WHERE project_id = $1 ORDER BY created_at ASC',
     [req.projectId]
   );
-  res.json(boards);
+  // Привилегированные роли видят все доски, остальным — фильтр по доступу
+  if (role === 'admin' || role === 'manager') return res.json(boards);
+  const accessible: any[] = [];
+  for (const b of boards) {
+    if (await canAccessBoard(b, role, userId)) accessible.push(b);
+  }
+  res.json(accessible);
 });
 
 router.post('/', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
@@ -25,7 +42,7 @@ router.post('/', authenticate, requireProjectAccess, requireProjectRole('admin',
 
 router.patch('/:boardId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
-  const { name, completed_column_id, background, column_style } = req.body;
+  const { name, completed_column_id, background, column_style, is_restricted } = req.body;
   const updates: string[] = [];
   const params: any[] = [];
   let i = 1;
@@ -33,6 +50,7 @@ router.patch('/:boardId', authenticate, requireProjectAccess, requireProjectRole
   if (completed_column_id !== undefined) { updates.push(`completed_column_id = $${i++}`); params.push(completed_column_id); }
   if (background !== undefined) { updates.push(`background = $${i++}`); params.push(background); }
   if (column_style !== undefined) { updates.push(`column_style = $${i++}`); params.push(column_style); }
+  if (is_restricted !== undefined) { updates.push(`is_restricted = $${i++}`); params.push(is_restricted); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(boardId, req.projectId);
   const board = await queryOne<any>(
@@ -57,6 +75,11 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
     [boardId, req.projectId]
   );
   if (!board) return res.status(404).json({ error: 'Board not found' });
+
+  // Проверка доступа на уровне доски
+  if (!(await canAccessBoard(board, req.projectMember!.role, req.user!.id))) {
+    return res.status(403).json({ error: 'No access to this board' });
+  }
 
   const columns = await query<any>(
     'SELECT * FROM columns WHERE board_id = $1 ORDER BY position ASC',
@@ -122,6 +145,33 @@ router.get('/:boardId/completed', authenticate, requireProjectAccess, async (req
     [boardId]
   );
   res.json(tasks);
+});
+
+// Board access: get restriction state + member ids
+router.get('/:boardId/access', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { boardId } = req.params;
+  const board = await queryOne<{ is_restricted: boolean }>('SELECT is_restricted FROM boards WHERE id = $1 AND project_id = $2', [boardId, req.projectId]);
+  if (!board) return res.status(404).json({ error: 'Board not found' });
+  const members = await query<{ user_id: string }>('SELECT user_id FROM board_members WHERE board_id = $1', [boardId]);
+  res.json({ is_restricted: board.is_restricted, member_ids: members.map(m => m.user_id) });
+});
+
+// Add a board member
+router.post('/:boardId/members', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { boardId } = req.params;
+  const { user_id } = req.body;
+  // user must be a member of the project
+  const pm = await queryOne('SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2', [req.projectId, user_id]);
+  if (!pm) return res.status(400).json({ error: 'User is not a project member' });
+  await queryOne('INSERT INTO board_members (board_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [boardId, user_id]);
+  res.json({ ok: true });
+});
+
+// Remove a board member
+router.delete('/:boardId/members/:userId', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
+  const { boardId, userId } = req.params;
+  await queryOne('DELETE FROM board_members WHERE board_id = $1 AND user_id = $2', [boardId, userId]);
+  res.json({ ok: true });
 });
 
 export default router;

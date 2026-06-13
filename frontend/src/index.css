@@ -28,3 +28,38 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
 }
+
+/* ===== Тёмная тема — только для области доски ===== */
+.board-dark { color: #e5e7eb; }
+
+/* Столбцы */
+.board-dark .mello-col.bg-gray-50 { background-color: rgba(30, 41, 59, 0.6) !important; }
+.board-dark .mello-col.bg-white\/60 { background-color: rgba(30, 41, 59, 0.45) !important; border-color: rgba(148,163,184,0.2) !important; }
+.board-dark .mello-col { border-color: rgba(148, 163, 184, 0.25) !important; }
+.board-dark .mello-col .text-gray-700 { color: #e2e8f0 !important; }
+.board-dark .mello-col .text-gray-500 { color: #cbd5e1 !important; }
+.board-dark .mello-col .text-gray-400 { color: #94a3b8 !important; }
+.board-dark .mello-col .bg-gray-100 { background-color: rgba(148, 163, 184, 0.25) !important; color: #e2e8f0 !important; }
+.board-dark .mello-col .hover\:bg-white\/60:hover { background-color: rgba(148,163,184,0.15) !important; }
+
+/* Карточки задач */
+.board-dark .mello-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.board-dark .mello-card .text-gray-900 { color: #f1f5f9 !important; }
+.board-dark .mello-card .text-gray-400 { color: #94a3b8 !important; }
+
+/* Форма добавления задачи / столбца */
+.board-dark .mello-col input,
+.board-dark .mello-col textarea {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+/* «Добавить столбец» (пунктирная рамка) */
+.board-dark .border-dashed { border-color: rgba(148,163,184,0.4) !important; color: #cbd5e1 !important; }
+
+/* Палочки-разделители темнее */
+.board-dark .mello-col.border-l { border-color: rgba(148, 163, 184, 0.3) !important; }
