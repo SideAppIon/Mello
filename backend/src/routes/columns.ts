@@ -20,6 +20,18 @@ async function resolveBoard(req: ProjectRequest, res: Response, next: Function) 
   next();
 }
 
+// Reorder columns — ВАЖНО: объявляется до '/:columnId', иначе PATCH /reorder
+// попадёт в обработчик '/:columnId' (columnId="reorder") и вернёт 400.
+router.patch('/reorder', authenticate, resolveBoard as any, requireProjectAccess, requireProjectRole('admin', 'manager', 'member'), async (req: ProjectRequest, res: Response) => {
+  const { boardId } = req.params;
+  const { columns } = req.body as { columns: { id: string; position: number }[] };
+  if (!Array.isArray(columns)) return res.status(400).json({ error: 'columns array required' });
+  for (const col of columns) {
+    await queryOne('UPDATE columns SET position = $1 WHERE id = $2 AND board_id = $3', [col.position, col.id, boardId]);
+  }
+  res.json({ ok: true });
+});
+
 router.post('/', authenticate, resolveBoard as any, requireProjectAccess, requireProjectRole('admin', 'manager', 'member'), async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
   const { name, color } = req.body;
@@ -55,16 +67,6 @@ router.patch('/:columnId', authenticate, resolveBoard as any, requireProjectAcce
 router.delete('/:columnId', authenticate, resolveBoard as any, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { columnId } = req.params;
   await queryOne('DELETE FROM columns WHERE id = $1', [columnId]);
-  res.json({ ok: true });
-});
-
-// Reorder columns
-router.patch('/reorder', authenticate, resolveBoard as any, requireProjectAccess, requireProjectRole('admin', 'manager', 'member'), async (req: ProjectRequest, res: Response) => {
-  const { boardId } = req.params;
-  const { columns } = req.body as { columns: { id: string; position: number }[] };
-  for (const col of columns) {
-    await queryOne('UPDATE columns SET position = $1 WHERE id = $2 AND board_id = $3', [col.position, col.id, boardId]);
-  }
   res.json({ ok: true });
 });
 

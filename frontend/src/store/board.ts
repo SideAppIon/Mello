@@ -184,30 +184,28 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   moveTask: async (taskId, fromColumnId, toColumnId, newPosition) => {
-    // Optimistic update
+    // Оптимистичное обновление. Состояние берём из стора (а не из устаревшего
+    // замыкания компонента) и ищем задачу в ЛЮБОЙ колонке — handleDragOver мог
+    // уже переместить её. Иначе свежесозданную задачу не находили в fromColumnId
+    // и она «пропадала».
     const board = get().board;
     if (!board) return;
+    if (!board.columns.some(c => c.id === toColumnId)) return; // целевая колонка обязана существовать
 
-    const fromCol = board.columns.find(c => c.id === fromColumnId);
-    const task = fromCol?.tasks.find(t => t.id === taskId);
+    let task: Task | undefined;
+    for (const c of board.columns) {
+      const found = c.tasks.find(t => t.id === taskId);
+      if (found) { task = found; break; }
+    }
     if (!task) return;
 
+    // Снимаем задачу со всех колонок, затем вставляем в целевую на нужную позицию.
     const newColumns = board.columns.map(col => {
-      if (col.id === fromColumnId && col.id === toColumnId) {
-        // Reorder within same column
-        const tasks = col.tasks.filter(t => t.id !== taskId);
-        tasks.splice(newPosition, 0, { ...task, position: newPosition });
-        return { ...col, tasks: tasks.map((t, i) => ({ ...t, position: i })) };
-      }
-      if (col.id === fromColumnId) {
-        return { ...col, tasks: col.tasks.filter(t => t.id !== taskId) };
-      }
-      if (col.id === toColumnId) {
-        const tasks = [...col.tasks.filter(t => t.id !== taskId)];
-        tasks.splice(newPosition, 0, { ...task, column_id: toColumnId, position: newPosition });
-        return { ...col, tasks: tasks.map((t, i) => ({ ...t, position: i })) };
-      }
-      return col;
+      const tasks = col.tasks.filter(t => t.id !== taskId);
+      if (col.id !== toColumnId) return { ...col, tasks };
+      const at = Math.max(0, Math.min(newPosition, tasks.length));
+      tasks.splice(at, 0, { ...task!, column_id: toColumnId });
+      return { ...col, tasks: tasks.map((t, i) => ({ ...t, position: i })) };
     });
     set({ board: { ...board, columns: newColumns } });
 

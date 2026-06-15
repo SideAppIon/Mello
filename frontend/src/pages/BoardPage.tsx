@@ -149,6 +149,9 @@ export default function BoardPage() {
       if (col) toColumnId = col.id;
     }
 
+    // Цель должна быть реальной колонкой — иначе не трогаем (чтобы не «потерять» задачу).
+    if (!board.columns.find(c => c.id === toColumnId)) return;
+
     // Find task's CURRENT column from board state (not stale dnd-kit data)
     const currentCol = board.columns.find(c => c.tasks.some(t => t.id === draggedId));
     if (!currentCol || currentCol.id === toColumnId) return;

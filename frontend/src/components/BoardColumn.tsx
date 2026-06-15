@@ -85,6 +85,7 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
         <input
           autoFocus
           value={name}
+          onPointerDown={e => e.stopPropagation()}
           onChange={e => setName(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setName(column.name); setEditing(false); } }}
@@ -100,7 +101,9 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
       )}
       <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{column.tasks.length}</span>
       {canEdit && (
-        <div className="relative">
+        // Останавливаем pointerdown, чтобы клики по меню не запускали драг колонки
+        // (иначе пункты выглядят «неактивными» и курсор остаётся «схватить»).
+        <div className="relative" onPointerDown={e => e.stopPropagation()}>
           <button
             onClick={() => setMenu(!menu)}
             className="text-gray-400 hover:text-gray-600 p-0.5 rounded"
@@ -110,7 +113,10 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
             </svg>
           </button>
           {menu && (
-            <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-44 z-10">
+            <>
+              {/* Клик мимо меню закрывает его */}
+              <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+              <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-44 z-20 cursor-default">
               <button
                 onClick={() => { setEditing(true); setMenu(false); }}
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50"
@@ -145,7 +151,8 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
               >
                 Удалить
               </button>
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}
