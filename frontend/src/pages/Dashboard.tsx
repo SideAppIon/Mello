@@ -162,17 +162,25 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export default function Dashboard() {
-  const { user, company } = useAuthStore();
+  const { user, company, setCompany } = useAuthStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '', color: PROJECT_COLORS[0] });
   const [error, setError] = useState('');
 
+  // Если у пользователя есть компания, но объект не подгрузился (например, фоновый
+  // запрос в loadMe сбойнул после простоя) — догружаем, не показывая «создать компанию»
   useEffect(() => {
-    if (!company) return;
+    if (user?.company_id && !company) {
+      companiesApi.getMy().then(setCompany).catch(() => {});
+    }
+  }, [user?.company_id, company]);
+
+  useEffect(() => {
+    if (!user?.company_id) return;
     projectsApi.list().then(setProjects).finally(() => setLoading(false));
-  }, [company]);
+  }, [user?.company_id]);
 
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,7 +194,19 @@ export default function Dashboard() {
     }
   };
 
-  if (!company) return <SetupCompany />;
+  // «Создать компанию» — только если у пользователя реально нет компании
+  if (!user?.company_id) return <SetupCompany />;
+  // Компания есть, но объект ещё грузится — показываем спиннер, а не форму создания
+  if (!company) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

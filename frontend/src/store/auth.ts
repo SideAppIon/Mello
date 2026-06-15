@@ -69,5 +69,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  setCompany: (company) => set({ company }),
+  setCompany: (company) => set((s) => ({
+    company,
+    user: s.user ? { ...s.user, company_id: company.id } : s.user,
+  })),
 }));
