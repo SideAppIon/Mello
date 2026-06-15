@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
-import { query, queryOne } from '../db';
+import { randomUUID } from 'crypto';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
+import { assembleTasks } from '../lib/taskAssembly';
 
 const router = Router({ mergeParams: true });
 
@@ -33,10 +35,7 @@ router.get('/', authenticate, requireProjectAccess, async (req: ProjectRequest, 
 router.post('/', authenticate, requireProjectAccess, requireProjectRole('admin', 'manager'), async (req: ProjectRequest, res: Response) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Board name required' });
-  const board = await queryOne<any>(
-    'INSERT INTO boards (project_id, name) VALUES ($1, $2) RETURNING *',
-    [req.projectId, name]
-  );
+  const board = await insertOne<any>('boards', { project_id: req.projectId, name });
   res.status(201).json(board);
 });
 
@@ -53,9 +52,13 @@ router.patch('/:boardId', authenticate, requireProjectAccess, requireProjectRole
   if (is_restricted !== undefined) { updates.push(`is_restricted = $${i++}`); params.push(is_restricted); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(boardId, req.projectId);
-  const board = await queryOne<any>(
-    `UPDATE boards SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i} RETURNING *`,
+  await query(
+    `UPDATE boards SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i}`,
     params
+  );
+  const board = await queryOne<any>(
+    'SELECT * FROM boards WHERE id = $1 AND project_id = $2',
+    [boardId, req.projectId]
   );
   if (!board) return res.status(404).json({ error: 'Board not found' });
   res.json(board);
@@ -86,23 +89,13 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
     [boardId]
   );
 
-  const tasks = await query<any>(
-    `SELECT t.*,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
-            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
-            COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks,
-            (SELECT COUNT(*) FROM attachments a WHERE a.task_id = t.id) as attachment_count
-     FROM tasks t
-     LEFT JOIN task_tags tt ON tt.task_id = t.id
-     LEFT JOIN task_assignees ta ON ta.task_id = t.id
-     LEFT JOIN users u ON u.id = ta.user_id
-     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
-     WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1) AND t.is_completed = FALSE
-     GROUP BY t.id
-     ORDER BY t.position ASC`,
+  const taskRows = await query<any>(
+    `SELECT * FROM tasks
+     WHERE column_id IN (SELECT id FROM columns WHERE board_id = $1) AND is_completed = FALSE
+     ORDER BY position ASC`,
     [boardId]
   );
+  const tasks = await assembleTasks(taskRows, { attachmentCount: true });
 
   const custom_fields = await query<any>(
     'SELECT * FROM project_custom_fields WHERE project_id = $1 ORDER BY position ASC, created_at ASC',
@@ -129,22 +122,13 @@ router.get('/:boardId/full', authenticate, requireProjectAccess, async (req: Pro
 // Lazy-load completed tasks for a board (loaded only on demand)
 router.get('/:boardId/completed', authenticate, requireProjectAccess, async (req: ProjectRequest, res: Response) => {
   const { boardId } = req.params;
-  const tasks = await query<any>(
-    `SELECT t.*,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
-            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
-            COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks
-     FROM tasks t
-     LEFT JOIN task_tags tt ON tt.task_id = t.id
-     LEFT JOIN task_assignees ta ON ta.task_id = t.id
-     LEFT JOIN users u ON u.id = ta.user_id
-     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
-     WHERE t.column_id = ANY(SELECT id FROM columns WHERE board_id = $1) AND t.is_completed = TRUE
-     GROUP BY t.id
-     ORDER BY t.completed_at DESC NULLS LAST`,
+  const taskRows = await query<any>(
+    `SELECT * FROM tasks
+     WHERE column_id IN (SELECT id FROM columns WHERE board_id = $1) AND is_completed = TRUE
+     ORDER BY completed_at DESC`,
     [boardId]
   );
+  const tasks = await assembleTasks(taskRows);
   res.json(tasks);
 });
 
@@ -168,12 +152,12 @@ router.post('/:boardId/members', authenticate, requireProjectAccess, requireProj
     const inCompany = await queryOne('SELECT 1 FROM users WHERE id = $1 AND company_id = $2', [user_id, req.user!.company_id]);
     if (!inCompany) return res.status(400).json({ error: 'User is not in your company' });
     // Автодобавление в проект на роль участника
-    await queryOne(
-      "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
-      [req.projectId, user_id]
+    await query(
+      "INSERT IGNORE INTO project_members (id, project_id, user_id, role) VALUES ($1, $2, $3, 'member')",
+      [randomUUID(), req.projectId, user_id]
     );
   }
-  await queryOne('INSERT INTO board_members (board_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [boardId, user_id]);
+  await query('INSERT IGNORE INTO board_members (board_id, user_id) VALUES ($1, $2)', [boardId, user_id]);
   res.json({ ok: true });
 });
 

@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { query, queryOne } from '../db';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
 import { presignUpload, publicUrl, deleteObject, safeName } from '../lib/s3';
+import { assembleTasks } from '../lib/taskAssembly';
 
 const router = Router({ mergeParams: true });
 
@@ -35,24 +36,16 @@ async function logHistory(taskId: string, userId: string, action: string, field?
 }
 
 async function getFullTask(taskId: string) {
-  return queryOne<any>(
-    `SELECT t.*,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', tt.id, 'name', tt.name, 'color', tt.color)) FILTER (WHERE tt.id IS NOT NULL), '[]') as tags,
-            COALESCE(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name, 'avatar_color', u.avatar_color, 'email', u.email)) FILTER (WHERE u.id IS NOT NULL), '[]') as assignees,
-            COALESCE(json_object_agg(cv.field_id, cv.value) FILTER (WHERE cv.field_id IS NOT NULL), '{}') as custom_values,
-            COALESCE((SELECT json_agg(s ORDER BY s.position, s.created_at) FROM subtasks s WHERE s.task_id = t.id), '[]') as subtasks,
-            COALESCE((SELECT json_agg(a ORDER BY a.created_at) FROM attachments a WHERE a.task_id = t.id AND a.comment_id IS NULL), '[]') as attachments,
-            ub.full_name as created_by_name
+  const task = await queryOne<any>(
+    `SELECT t.*, ub.full_name as created_by_name
      FROM tasks t
-     LEFT JOIN task_tags tt ON tt.task_id = t.id
-     LEFT JOIN task_assignees ta ON ta.task_id = t.id
-     LEFT JOIN users u ON u.id = ta.user_id
-     LEFT JOIN task_custom_values cv ON cv.task_id = t.id
      LEFT JOIN users ub ON ub.id = t.created_by
-     WHERE t.id = $1
-     GROUP BY t.id, ub.full_name`,
+     WHERE t.id = $1`,
     [taskId]
   );
+  if (!task) return null;
+  const [full] = await assembleTasks([task], { attachments: true, assigneeEmail: true });
+  return full;
 }
 
 // Create task in a column
@@ -81,14 +74,19 @@ router.post('/column/:columnId', authenticate, async (req: ProjectRequest, res: 
   const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM tasks WHERE column_id = $1', [columnId]);
   const position = (parseInt(maxPos?.max || '-1') + 1);
 
-  const task = await queryOne<any>(
-    `INSERT INTO tasks (column_id, title, description, priority, deadline, estimated_hours, position, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [columnId, title, description, priority, deadline || null, estimated_hours || null, position, user.id]
-  );
+  const task = await insertOne<any>('tasks', {
+    column_id: columnId,
+    title,
+    description: description ?? null,
+    priority,
+    deadline: deadline || null,
+    estimated_hours: estimated_hours || null,
+    position,
+    created_by: user.id,
+  });
 
-  await logHistory(task!.id, user.id, 'created');
-  res.status(201).json(await getFullTask(task!.id));
+  await logHistory(task.id, user.id, 'created');
+  res.status(201).json(await getFullTask(task.id));
 });
 
 // Get single task
@@ -150,8 +148,8 @@ router.patch('/:taskId', authenticate, async (req: ProjectRequest, res: Response
 
   const updates = Object.keys(fields).map((k, i) => `${k} = $${i + 1}`);
   const params = [...Object.values(fields), taskId];
-  await queryOne(
-    `UPDATE tasks SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${params.length} RETURNING *`,
+  await query(
+    `UPDATE tasks SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${params.length}`,
     params
   );
 
@@ -241,9 +239,9 @@ router.put('/:taskId/custom-values/:fieldId', authenticate, async (req: ProjectR
   if (value === null || value === '') {
     await queryOne('DELETE FROM task_custom_values WHERE task_id = $1 AND field_id = $2', [taskId, fieldId]);
   } else {
-    await queryOne(
+    await query(
       `INSERT INTO task_custom_values (task_id, field_id, value) VALUES ($1, $2, $3)
-       ON CONFLICT (task_id, field_id) DO UPDATE SET value = $3`,
+       ON DUPLICATE KEY UPDATE value = VALUES(value)`,
       [taskId, fieldId, String(value)]
     );
   }
@@ -296,11 +294,13 @@ router.patch('/:taskId/complete', authenticate, async (req: ProjectRequest, res:
     if (!completedColumnId) {
       const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM columns WHERE board_id = $1', [boardRow.id]);
       const position = parseInt(maxPos?.max || '-1') + 1;
-      const col = await queryOne<any>(
-        'INSERT INTO columns (board_id, name, position, color) VALUES ($1, $2, $3, $4) RETURNING *',
-        [boardRow.id, 'Выполнено', position, '#10b981']
-      );
-      completedColumnId = col!.id;
+      const col = await insertOne<any>('columns', {
+        board_id: boardRow.id,
+        name: 'Выполнено',
+        position,
+        color: '#10b981',
+      });
+      completedColumnId = col.id;
       await queryOne('UPDATE boards SET completed_column_id = $1 WHERE id = $2', [completedColumnId, boardRow.id]);
     }
     const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM tasks WHERE column_id = $1', [completedColumnId]);
@@ -355,11 +355,16 @@ router.post('/:taskId/attachments', authenticate, async (req: ProjectRequest, re
     if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
   }
 
-  const att = await queryOne<any>(
-    `INSERT INTO attachments (task_id, comment_id, file_name, file_key, url, content_type, size, uploaded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [taskId, comment_id || null, file_name, file_key, url, content_type || null, size || null, user.id]
-  );
+  const att = await insertOne<any>('attachments', {
+    task_id: taskId,
+    comment_id: comment_id || null,
+    file_name,
+    file_key,
+    url,
+    content_type: content_type || null,
+    size: size || null,
+    uploaded_by: user.id,
+  });
   res.status(201).json(att);
 });
 
@@ -385,7 +390,8 @@ router.delete('/:taskId/attachments/:attachmentId', authenticate, async (req: Pr
     if (!member || member.role === 'viewer') return res.status(403).json({ error: 'No permission' });
   }
 
-  const att = await queryOne<any>('DELETE FROM attachments WHERE id = $1 AND task_id = $2 RETURNING file_key', [attachmentId, taskId]);
+  const att = await queryOne<any>('SELECT file_key FROM attachments WHERE id = $1 AND task_id = $2', [attachmentId, taskId]);
+  await query('DELETE FROM attachments WHERE id = $1 AND task_id = $2', [attachmentId, taskId]);
   if (att) await deleteObject(att.file_key);
   res.json({ ok: true });
 });
@@ -406,10 +412,11 @@ router.post('/:taskId/subtasks', authenticate, async (req: ProjectRequest, res: 
 
   const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM subtasks WHERE task_id = $1', [taskId]);
   const position = parseInt(maxPos?.max || '-1') + 1;
-  const subtask = await queryOne<any>(
-    'INSERT INTO subtasks (task_id, title, position) VALUES ($1, $2, $3) RETURNING *',
-    [taskId, title.trim(), position]
-  );
+  const subtask = await insertOne<any>('subtasks', {
+    task_id: taskId,
+    title: title.trim(),
+    position,
+  });
   res.status(201).json(subtask);
 });
 
@@ -432,10 +439,11 @@ router.patch('/:taskId/subtasks/:subtaskId', authenticate, async (req: ProjectRe
   if (is_done !== undefined) { updates.push(`is_done = $${i++}`); params.push(is_done); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(subtaskId, taskId);
-  const subtask = await queryOne<any>(
-    `UPDATE subtasks SET ${updates.join(', ')} WHERE id = $${i++} AND task_id = $${i} RETURNING *`,
+  await query(
+    `UPDATE subtasks SET ${updates.join(', ')} WHERE id = $${i++} AND task_id = $${i}`,
     params
   );
+  const subtask = await queryOne<any>('SELECT * FROM subtasks WHERE id = $1 AND task_id = $2', [subtaskId, taskId]);
   if (!subtask) return res.status(404).json({ error: 'Subtask not found' });
   res.json(subtask);
 });
@@ -479,10 +487,7 @@ router.post('/:taskId/tags', authenticate, async (req: ProjectRequest, res: Resp
   const { name, color = '#6366f1' } = req.body;
   if (!name) return res.status(400).json({ error: 'Tag name required' });
 
-  const tag = await queryOne<any>(
-    'INSERT INTO task_tags (task_id, name, color) VALUES ($1, $2, $3) RETURNING *',
-    [taskId, name, color]
-  );
+  const tag = await insertOne<any>('task_tags', { task_id: taskId, name, color });
   const user = (req as AuthRequest).user!;
   await logHistory(taskId, user.id, 'tag_added', 'tags', null, name);
   res.status(201).json(tag);
@@ -490,7 +495,8 @@ router.post('/:taskId/tags', authenticate, async (req: ProjectRequest, res: Resp
 
 router.delete('/:taskId/tags/:tagId', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId, tagId } = req.params;
-  const tag = await queryOne<any>('DELETE FROM task_tags WHERE id = $1 AND task_id = $2 RETURNING *', [tagId, taskId]);
+  const tag = await queryOne<any>('SELECT * FROM task_tags WHERE id = $1 AND task_id = $2', [tagId, taskId]);
+  await query('DELETE FROM task_tags WHERE id = $1 AND task_id = $2', [tagId, taskId]);
   if (tag) {
     const user = (req as AuthRequest).user!;
     await logHistory(taskId, user.id, 'tag_removed', 'tags', tag.name, null);
@@ -502,8 +508,8 @@ router.delete('/:taskId/tags/:tagId', authenticate, async (req: ProjectRequest, 
 router.post('/:taskId/assignees', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;
   const { user_id } = req.body;
-  await queryOne(
-    'INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+  await query(
+    'INSERT IGNORE INTO task_assignees (task_id, user_id) VALUES ($1, $2)',
     [taskId, user_id]
   );
   const user = (req as AuthRequest).user!;
@@ -525,13 +531,27 @@ router.delete('/:taskId/assignees/:userId', authenticate, async (req: ProjectReq
 router.get('/:taskId/comments', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId } = req.params;
   const comments = await query<any>(
-    `SELECT tc.*, u.full_name, u.avatar_color,
-            COALESCE((SELECT json_agg(a ORDER BY a.created_at) FROM attachments a WHERE a.comment_id = tc.id), '[]') as attachments
+    `SELECT tc.*, u.full_name, u.avatar_color
      FROM task_comments tc
      JOIN users u ON u.id = tc.user_id
      WHERE tc.task_id = $1 ORDER BY tc.created_at ASC`,
     [taskId]
   );
+  if (comments.length) {
+    const ids = comments.map((c: any) => c.id);
+    const ph = ids.map(() => '?').join(', ');
+    const atts = await query<any>(
+      `SELECT * FROM attachments WHERE comment_id IN (${ph}) ORDER BY created_at ASC`,
+      ids
+    );
+    const byComment = new Map<string, any[]>();
+    for (const a of atts) {
+      const arr = byComment.get(a.comment_id);
+      if (arr) arr.push(a);
+      else byComment.set(a.comment_id, [a]);
+    }
+    for (const c of comments) c.attachments = byComment.get(c.id) || [];
+  }
   res.json(comments);
 });
 
@@ -541,26 +561,30 @@ router.post('/:taskId/comments', authenticate, async (req: ProjectRequest, res: 
   if (!content && !allow_empty) return res.status(400).json({ error: 'Content required' });
 
   const user = (req as AuthRequest).user!;
-  const comment = await queryOne<any>(
-    `INSERT INTO task_comments (task_id, user_id, content) VALUES ($1, $2, $3)
-     RETURNING *, (SELECT full_name FROM users WHERE id = $2) as full_name,
-                 (SELECT avatar_color FROM users WHERE id = $2) as avatar_color`,
-    [taskId, user.id, content || '']
-  );
+  const comment = await insertOne<any>('task_comments', {
+    task_id: taskId,
+    user_id: user.id,
+    content: content || '',
+  });
+  const author = await queryOne<any>('SELECT full_name, avatar_color FROM users WHERE id = $1', [user.id]);
   await logHistory(taskId, user.id, 'comment_added');
-  res.status(201).json(comment);
+  res.status(201).json({ ...comment, full_name: author?.full_name, avatar_color: author?.avatar_color });
 });
 
 router.patch('/:taskId/comments/:commentId', authenticate, async (req: ProjectRequest, res: Response) => {
   const { taskId, commentId } = req.params;
   const { content } = req.body;
   const user = (req as AuthRequest).user!;
-  const comment = await queryOne<any>(
+  await query(
     `UPDATE task_comments SET content = $1, updated_at = NOW()
-     WHERE id = $2 AND task_id = $3 AND user_id = $4
-     RETURNING *, (SELECT full_name FROM users WHERE id = $4) as full_name,
-                 (SELECT avatar_color FROM users WHERE id = $4) as avatar_color`,
+     WHERE id = $2 AND task_id = $3 AND user_id = $4`,
     [content, commentId, taskId, user.id]
+  );
+  const comment = await queryOne<any>(
+    `SELECT tc.*, u.full_name, u.avatar_color
+     FROM task_comments tc JOIN users u ON u.id = tc.user_id
+     WHERE tc.id = $1 AND tc.task_id = $2 AND tc.user_id = $3`,
+    [commentId, taskId, user.id]
   );
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
   res.json(comment);

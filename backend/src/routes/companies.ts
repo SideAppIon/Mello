@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne } from '../db';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate, AuthRequest, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -23,10 +23,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     attempts++;
   }
 
-  const company = await queryOne<any>(
-    'INSERT INTO companies (name, invite_code) VALUES ($1, $2) RETURNING *',
-    [name, invite_code]
-  );
+  const company = await insertOne<any>('companies', { name, invite_code });
 
   await queryOne(
     'UPDATE users SET company_id = $1, role = $2 WHERE id = $3',
@@ -81,12 +78,15 @@ router.post('/members', authenticate, requireAdmin, async (req: AuthRequest, res
   const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
   const avatar_color = colors[Math.floor(Math.random() * colors.length)];
 
-  const user = await queryOne<any>(
-    `INSERT INTO users (email, password_hash, full_name, company_id, role, avatar_color)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, email, full_name, role, company_id, avatar_color`,
-    [email, password_hash, full_name, req.user!.company_id, role, avatar_color]
-  );
+  const created = await insertOne<any>('users', {
+    email,
+    password_hash,
+    full_name,
+    company_id: req.user!.company_id,
+    role,
+    avatar_color,
+  });
+  const { password_hash: _ph, ...user } = created;
   res.status(201).json(user);
 });
 
@@ -107,9 +107,10 @@ router.patch('/members/:userId', authenticate, requireAdmin, async (req: AuthReq
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
 
   params.push(userId);
+  await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${i}`, params);
   const user = await queryOne<any>(
-    `UPDATE users SET ${updates.join(', ')} WHERE id = $${i} RETURNING id, email, full_name, role, avatar_color, is_active`,
-    params
+    'SELECT id, email, full_name, role, avatar_color, is_active FROM users WHERE id = $1',
+    [userId]
   );
   res.json(user);
 });

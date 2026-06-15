@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { query, queryOne } from '../db';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
 
@@ -28,10 +28,12 @@ router.post('/', authenticate, resolveBoard as any, requireProjectAccess, requir
   const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM columns WHERE board_id = $1', [boardId]);
   const position = (parseInt(maxPos?.max || '-1') + 1);
 
-  const col = await queryOne<any>(
-    'INSERT INTO columns (board_id, name, position, color) VALUES ($1, $2, $3, $4) RETURNING *',
-    [boardId, name, position, color || '#94a3b8']
-  );
+  const col = await insertOne<any>('columns', {
+    board_id: boardId,
+    name,
+    position,
+    color: color || '#94a3b8',
+  });
   res.status(201).json(col);
 });
 
@@ -45,7 +47,8 @@ router.patch('/:columnId', authenticate, resolveBoard as any, requireProjectAcce
   if (color) { updates.push(`color = $${i++}`); params.push(color); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(columnId);
-  const col = await queryOne<any>(`UPDATE columns SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, params);
+  await query(`UPDATE columns SET ${updates.join(', ')} WHERE id = $${i}`, params);
+  const col = await queryOne<any>('SELECT * FROM columns WHERE id = $1', [columnId]);
   res.json(col);
 });
 

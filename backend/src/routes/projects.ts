@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import { query, queryOne } from '../db';
+import { randomUUID } from 'crypto';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
 
@@ -49,16 +50,18 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   const { name, description, color = '#6366f1' } = req.body;
   if (!name) return res.status(400).json({ error: 'Project name required' });
 
-  const project = await queryOne<any>(
-    `INSERT INTO projects (company_id, name, description, color, created_by)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [req.user!.company_id, name, description, color, req.user!.id]
-  );
+  const project = await insertOne<any>('projects', {
+    company_id: req.user!.company_id,
+    name,
+    description,
+    color,
+    created_by: req.user!.id,
+  });
 
   // Creator becomes project admin
-  await queryOne(
-    'INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-    [project!.id, req.user!.id, 'admin']
+  await query(
+    'INSERT IGNORE INTO project_members (id, project_id, user_id, role) VALUES ($1, $2, $3, $4)',
+    [randomUUID(), project.id, req.user!.id, 'admin']
   );
 
   res.status(201).json(project);
@@ -98,7 +101,8 @@ router.patch('/:id', authenticate, requireProjectAccess, requireProjectRole('adm
   if (color) { updates.push(`color = $${i++}`); params.push(color); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(req.projectId);
-  const project = await queryOne<any>(`UPDATE projects SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, params);
+  await query(`UPDATE projects SET ${updates.join(', ')} WHERE id = $${i}`, params);
+  const project = await queryOne<any>('SELECT * FROM projects WHERE id = $1', [req.projectId]);
   res.json(project);
 });
 
@@ -113,9 +117,10 @@ router.post('/:id/members', authenticate, requireProjectAccess, requireProjectRo
   const user = await queryOne('SELECT id FROM users WHERE id = $1 AND company_id = $2', [user_id, req.user!.company_id]);
   if (!user) return res.status(404).json({ error: 'User not found in company' });
 
-  await queryOne(
-    'INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (project_id, user_id) DO UPDATE SET role = $3',
-    [req.projectId, user_id, role]
+  await query(
+    `INSERT INTO project_members (id, project_id, user_id, role) VALUES ($1, $2, $3, $4)
+     ON DUPLICATE KEY UPDATE role = VALUES(role)`,
+    [randomUUID(), req.projectId, user_id, role]
   );
   res.json({ ok: true });
 });
@@ -154,11 +159,11 @@ router.put('/:id/permissions', authenticate, requireProjectAccess, requireProjec
   if (!Array.isArray(permissions)) return res.status(400).json({ error: 'permissions array required' });
 
   for (const p of permissions) {
-    await queryOne(
-      `INSERT INTO project_field_permissions (project_id, role, field_name, can_edit)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (project_id, role, field_name) DO UPDATE SET can_edit = $4`,
-      [req.projectId, p.role, p.field_name, p.can_edit]
+    await query(
+      `INSERT INTO project_field_permissions (id, project_id, role, field_name, can_edit)
+       VALUES ($1, $2, $3, $4, $5)
+       ON DUPLICATE KEY UPDATE can_edit = VALUES(can_edit)`,
+      [randomUUID(), req.projectId, p.role, p.field_name, p.can_edit]
     );
   }
   res.json({ ok: true });
@@ -181,10 +186,13 @@ router.post('/:id/custom-fields', authenticate, requireProjectAccess, requirePro
   if (!['text', 'number', 'date', 'select'].includes(field_type)) return res.status(400).json({ error: 'Invalid field type' });
   const maxPos = await queryOne<{ max: string }>('SELECT MAX(position) as max FROM project_custom_fields WHERE project_id = $1', [req.projectId]);
   const position = parseInt(maxPos?.max || '-1') + 1;
-  const field = await queryOne<any>(
-    'INSERT INTO project_custom_fields (project_id, name, field_type, options, position) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [req.projectId, name.trim(), field_type, JSON.stringify(field_type === 'select' ? options : []), position]
-  );
+  const field = await insertOne<any>('project_custom_fields', {
+    project_id: req.projectId,
+    name: name.trim(),
+    field_type,
+    options: field_type === 'select' ? options : [],
+    position,
+  });
   res.status(201).json(field);
 });
 
@@ -198,9 +206,13 @@ router.patch('/:id/custom-fields/:fieldId', authenticate, requireProjectAccess, 
   if (options !== undefined) { updates.push(`options = $${i++}`); params.push(JSON.stringify(options)); }
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
   params.push(fieldId, req.projectId);
-  const field = await queryOne<any>(
-    `UPDATE project_custom_fields SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i} RETURNING *`,
+  await query(
+    `UPDATE project_custom_fields SET ${updates.join(', ')} WHERE id = $${i++} AND project_id = $${i}`,
     params
+  );
+  const field = await queryOne<any>(
+    'SELECT * FROM project_custom_fields WHERE id = $1 AND project_id = $2',
+    [fieldId, req.projectId]
   );
   if (!field) return res.status(404).json({ error: 'Field not found' });
   res.json(field);

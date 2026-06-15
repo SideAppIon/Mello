@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne } from '../db';
+import { query, queryOne, insertOne } from '../db';
 import { authenticate, AuthRequest, signToken } from '../middleware/auth';
 
 const router = Router();
@@ -34,14 +34,17 @@ router.post('/register', async (req: Request, res: Response) => {
   const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444'];
   const avatar_color = colors[Math.floor(Math.random() * colors.length)];
 
-  const user = await queryOne<any>(
-    `INSERT INTO users (email, password_hash, full_name, company_id, role, avatar_color)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, email, full_name, role, company_id, avatar_color, created_at`,
-    [email, password_hash, full_name, company_id, role, avatar_color]
-  );
+  const created = await insertOne<any>('users', {
+    email,
+    password_hash,
+    full_name,
+    company_id,
+    role,
+    avatar_color,
+  });
+  const { password_hash: _ph, ...user } = created;
 
-  const token = signToken(user!.id);
+  const token = signToken(user.id);
   res.status(201).json({ user, token });
 });
 
@@ -87,9 +90,10 @@ router.patch('/me', authenticate, async (req: AuthRequest, res: Response) => {
   if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
 
   params.push(req.user!.id);
+  await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${i}`, params);
   const user = await queryOne<any>(
-    `UPDATE users SET ${updates.join(', ')} WHERE id = $${i} RETURNING id, email, full_name, role, company_id, avatar_color`,
-    params
+    'SELECT id, email, full_name, role, company_id, avatar_color FROM users WHERE id = $1',
+    [req.user!.id]
   );
   res.json(user);
 });
