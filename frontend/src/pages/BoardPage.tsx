@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext, DragEndEvent, DragOverEvent, DragStartEvent,
-  PointerSensor, useSensor, useSensors, DragOverlay, closestCorners,
+  PointerSensor, useSensor, useSensors, DragOverlay, closestCorners, pointerWithin,
+  CollisionDetection,
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useBoardStore } from '../store/board';
@@ -49,6 +50,29 @@ export const COLUMN_STYLES: { key: string; label: string }[] = [
   { key: 'divider', label: 'Палочки' },
   { key: 'dashed', label: 'Пунктир' },
 ];
+
+// Type-aware определение коллизий: колонка-сортируемая имеет id вида `col-<id>`,
+// колонка-дропзона и задачи — обычный id. Без разделения dnd-kit при драге задачи
+// иногда «цепляет» колонку (колонки прыгают), а при драге колонки — задачу
+// (перестановка колонок не срабатывает).
+const collisionDetection: CollisionDetection = (args) => {
+  const activeType = args.active.data.current?.type;
+
+  if (activeType === 'column') {
+    // Перетаскиваем колонку → коллизии только среди других колонок (`col-*`).
+    return closestCorners({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(c => String(c.id).startsWith('col-')),
+    });
+  }
+
+  // Перетаскиваем задачу → исключаем колонки-сортируемые (`col-*`),
+  // оставляем задачи и дропзоны колонок.
+  const containers = args.droppableContainers.filter(c => !String(c.id).startsWith('col-'));
+  const pointer = pointerWithin({ ...args, droppableContainers: containers });
+  if (pointer.length > 0) return pointer;
+  return closestCorners({ ...args, droppableContainers: containers });
+};
 
 export function getBackground(key: string) {
   return BOARD_BACKGROUNDS.find(b => b.key === key) || BOARD_BACKGROUNDS[0];
@@ -315,7 +339,7 @@ export default function BoardPage() {
         <div className="p-6 flex gap-4 min-w-max min-h-full items-start">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}

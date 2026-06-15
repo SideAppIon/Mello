@@ -157,6 +157,8 @@ export default function BoardColumn({ column, projectId, myRole, columnStyle = '
   const [addingTask, setAddingTask] = useState(false);
   const board = useBoardStore(s => s.board);
   const canAdd = ['admin', 'manager', 'member'].includes(myRole);
+  // Переставлять колонки разрешено тем же ролям, что и менять задачи (бэкенд: admin/manager/member).
+  const canDragColumn = ['admin', 'manager', 'member'].includes(myRole);
 
   const { setNodeRef: dropRef, isOver } = useDroppable({ id: column.id, data: { type: 'column' } });
   const { attributes, listeners, setNodeRef: dragRef, transform, transition, isDragging } = useSortable({
@@ -181,7 +183,11 @@ export default function BoardColumn({ column, projectId, myRole, columnStyle = '
         style={columnStyle === 'minimal' ? { borderTopColor: column.color } : undefined}
         ref={dropRef}
       >
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+        <div
+          {...(canDragColumn ? attributes : {})}
+          {...(canDragColumn ? listeners : {})}
+          className={canDragColumn ? 'cursor-grab active:cursor-grabbing' : ''}
+        >
           <ColumnHeader column={column} boardId={board?.id || ''} myRole={myRole} />
         </div>
 

@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { Column, Task, FullBoard } from '../types';
 import { boardsApi, columnsApi, tasksApi } from '../api/client';
 
+// Настройка «показывать выполненные» запоминается отдельно для каждой доски.
+const showCompletedKey = (boardId: string) => `mello:showCompleted:${boardId}`;
+const readShowCompleted = (boardId: string) => {
+  try { return localStorage.getItem(showCompletedKey(boardId)) === '1'; } catch { return false; }
+};
+const writeShowCompleted = (boardId: string, v: boolean) => {
+  try { localStorage.setItem(showCompletedKey(boardId), v ? '1' : '0'); } catch { /* ignore */ }
+};
+
 interface BoardState {
   board: FullBoard | null;
   loading: boolean;
@@ -41,10 +50,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({ loading: true });
     try {
       const board = await boardsApi.getFull(projectId, boardId);
-      set({ board });
-      if (get().showCompleted) {
+      const showCompleted = readShowCompleted(boardId);
+      set({ board, showCompleted });
+      if (showCompleted) {
         const completedTasks = await boardsApi.getCompleted(projectId, boardId);
         set({ completedTasks });
+      } else {
+        set({ completedTasks: [] });
       }
     } finally {
       set({ loading: false });
@@ -57,6 +69,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   setShowCompleted: (v) => {
+    const b = get().board;
+    if (b) writeShowCompleted(b.id, v);
     set({ showCompleted: v });
     if (!v) set({ completedTasks: [] });
   },
@@ -212,8 +226,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   reorderColumns: async (boardId, newOrder) => {
+    const prev = get().board;
     const cols = newOrder.map((c, i) => ({ ...c, position: i }));
     set((s) => ({ board: s.board ? { ...s.board, columns: cols } : s.board }));
-    await columnsApi.reorder(boardId, cols.map(c => ({ id: c.id, position: c.position })));
+    try {
+      await columnsApi.reorder(boardId, cols.map(c => ({ id: c.id, position: c.position })));
+    } catch {
+      set({ board: prev });
+    }
   },
 }));
