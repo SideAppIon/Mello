@@ -116,10 +116,10 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
             <>
               {/* Клик мимо меню закрывает его */}
               <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-              <div className="absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-44 z-20 cursor-default">
+              <div className="mello-menu absolute right-0 top-6 bg-white rounded-lg shadow-lg border border-gray-100 py-1 w-44 z-20 cursor-default">
               <button
                 onClick={() => { setEditing(true); setMenu(false); }}
-                className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Переименовать
               </button>
@@ -139,7 +139,7 @@ function ColumnHeader({ column, boardId, myRole }: { column: Column; boardId: st
               {canManage && (
                 <button
                   onClick={() => { setCompletedColumn(boardId, column.id); setMenu(false); }}
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 border-t border-gray-100 mt-1 flex items-center gap-2"
+                  className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100 mt-1 flex items-center gap-2"
                 >
                   <span className={`w-2 h-2 rounded-full ${isCompletedColumn ? 'bg-green-500' : 'bg-gray-300'}`} />
                   {isCompletedColumn ? 'Столбец выполненных ✓' : 'Сделать выполненными'}

@@ -64,3 +64,11 @@ body {
 
 /* Палочки-разделители темнее */
 .board-dark .mello-col.border-l { border-color: rgba(148, 163, 184, 0.3) !important; }
+
+/* Поповер-меню столбца — всегда светлая тема (белый фон), даже на тёмной доске.
+   Перебиваем «протекающие» правила .board-dark .mello-col по специфичности. */
+.mello-menu { color: #374151; }
+.board-dark .mello-col .mello-menu .text-gray-700 { color: #374151 !important; }
+.board-dark .mello-col .mello-menu .text-gray-500 { color: #6b7280 !important; }
+.board-dark .mello-col .mello-menu .text-gray-400 { color: #6b7280 !important; }
+.board-dark .mello-col .mello-menu .bg-gray-100 { background-color: #f3f4f6 !important; color: #374151 !important; }
