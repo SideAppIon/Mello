@@ -5,6 +5,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireProjectAccess, requireProjectRole, ProjectRequest } from '../middleware/projectAccess';
 import { presignUpload, publicUrl, deleteObject, safeName } from '../lib/s3';
 import { assembleTasks } from '../lib/taskAssembly';
+import { notify } from '../lib/notify';
 
 const router = Router({ mergeParams: true });
 
@@ -515,6 +516,18 @@ router.post('/:taskId/assignees', authenticate, async (req: ProjectRequest, res:
   const user = (req as AuthRequest).user!;
   const assignee = await queryOne<{ full_name: string }>('SELECT full_name FROM users WHERE id = $1', [user_id]);
   await logHistory(taskId, user.id, 'assignee_added', 'assignees', null, assignee?.full_name ?? user_id);
+  // Уведомляем исполнителя (если назначил не сам себе) со ссылкой на доску.
+  if (user_id && user_id !== user.id) {
+    const info = await queryOne<{ title: string; board_id: string; project_id: string }>(
+      `SELECT t.title, b.id AS board_id, b.project_id
+       FROM tasks t JOIN columns c ON c.id = t.column_id JOIN boards b ON b.id = c.board_id
+       WHERE t.id = $1`,
+      [taskId]
+    );
+    if (info) {
+      await notify(user_id, 'task', `Вам назначена задача: ${info.title}`, `/projects/${info.project_id}/boards/${info.board_id}`);
+    }
+  }
   res.json({ ok: true });
 });
 

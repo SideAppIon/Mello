@@ -146,6 +146,14 @@ export const calendarApi = {
   deleteAway: (id: string) => api.delete(`/calendar/away/${id}`).then(r => r.data),
 };
 
+// Notifications
+export const notificationsApi = {
+  list: () => api.get('/notifications').then(r => r.data),
+  markRead: (id: string) => api.patch(`/notifications/${id}/read`).then(r => r.data),
+  markAllRead: () => api.post('/notifications/read-all').then(r => r.data),
+  clear: () => api.delete('/notifications').then(r => r.data),
+};
+
 // Booking (публичные эндпоинты — без токена)
 export const bookingApi = {
   getInfo: (slug: string) => api.get(`/booking/${slug}`).then(r => r.data),

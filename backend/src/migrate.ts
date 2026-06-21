@@ -275,6 +275,21 @@ const statements: string[] = [
     KEY idx_cal_away_user (user_id, starts_at),
     CONSTRAINT fk_cal_away_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  // --- Уведомления ---
+  // Простой центр уведомлений: запись создаётся, когда другой пользователь
+  // затрагивает получателя (назначил встречу/задачу, прислал бронь).
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id CHAR(36) NOT NULL PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL,
+    type VARCHAR(16) NOT NULL,
+    title VARCHAR(512) NOT NULL,
+    link VARCHAR(512) NULL,
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_notif_user (user_id, created_at),
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 // Коды ошибок MySQL, которые можно безопасно игнорировать при повторном запуске

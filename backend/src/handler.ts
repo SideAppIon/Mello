@@ -10,6 +10,7 @@ import columnsRouter from './routes/columns';
 import tasksRouter from './routes/tasks';
 import calendarRouter from './routes/calendar';
 import bookingRouter from './routes/booking';
+import notificationsRouter from './routes/notifications';
 import { errorHandler, notFound } from './middleware/errors';
 
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api/boards/:boardId/columns', columnsRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/booking', bookingRouter);
+app.use('/api/notifications', notificationsRouter);
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

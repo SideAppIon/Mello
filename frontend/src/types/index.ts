@@ -250,6 +250,15 @@ export interface BookingResult {
   owner_timezone: string;
 }
 
+export interface AppNotification {
+  id: string;
+  type: 'event' | 'task' | 'booking';
+  title: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 export const WEEKDAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 export const PRIORITY_LABELS: Record<Priority, string> = {

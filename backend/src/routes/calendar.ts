@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { query, queryOne, insertOne, pool } from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { toMysqlUtc } from '../lib/timezone';
+import { notify } from '../lib/notify';
 
 const router = Router();
 
@@ -172,6 +173,10 @@ async function createEvent(ownerId: string, createdBy: string, attendeeIds: stri
   const unique = Array.from(new Set([ownerId, ...attendeeIds]));
   for (const uid of unique) {
     await query('INSERT IGNORE INTO calendar_event_attendees (event_id, user_id) VALUES ($1, $2)', [event.id, uid]);
+    // Уведомляем участников, кроме самого создателя.
+    if (uid !== createdBy) {
+      await notify(uid, 'event', `Новая встреча: ${event.title}`, '/calendar');
+    }
   }
   return event;
 }

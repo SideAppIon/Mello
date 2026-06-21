@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query, queryOne, insertOne } from '../db';
 import { zonedToUtc, parseHm, weekdayInTz, toMysqlUtc } from '../lib/timezone';
+import { notify } from '../lib/notify';
 
 // Публичные эндпоинты бронирования — без авторизации. Гость (в т.ч. незарегистрированный)
 // видит только свободные слоты по рабочему времени владельца и бронирует один из них.
@@ -146,6 +147,7 @@ router.post('/:slug', async (req: Request, res: Response) => {
     guest_email: guest_email.trim(),
   });
   await query('INSERT IGNORE INTO calendar_event_attendees (event_id, user_id) VALUES ($1, $2)', [event.id, owner.user_id]);
+  await notify(owner.user_id, 'booking', `Новая бронь от ${guest_name.trim()}`, '/calendar');
 
   res.status(201).json({
     starts_at: event.starts_at,

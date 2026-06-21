@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Modal from '../components/Modal';
 import Avatar from '../components/Avatar';
@@ -40,6 +40,7 @@ function itemTime(it: CalendarItem): string {
 
 export default function CalendarPage() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<CalendarSettings | null>(null);
   const [members, setMembers] = useState<CalendarMember[]>([]);
   const [items, setItems] = useState<CalendarItem[]>([]);
@@ -123,6 +124,18 @@ export default function CalendarPage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* Быстрая навигация */}
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-brand-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Назад
+          </button>
+          <Link to="/" className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-brand-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+            К проектам
+          </Link>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{MONTHS[month0]} {year}</h1>
