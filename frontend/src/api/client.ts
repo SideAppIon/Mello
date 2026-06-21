@@ -129,3 +129,27 @@ export const tasksApi = {
     }).then(r => r.data);
   },
 };
+
+// Calendar
+export const calendarApi = {
+  getSettings: () => api.get('/calendar/settings').then(r => r.data),
+  updateSettings: (data: any) => api.patch('/calendar/settings', data).then(r => r.data),
+  listEvents: (from: string, to: string, include: 'meetings' | 'tasks' | 'both') =>
+    api.get('/calendar/events', { params: { from, to, include } }).then(r => r.data),
+  createEvent: (data: any) => api.post('/calendar/events', data).then(r => r.data),
+  createEventFor: (userId: string, data: any) => api.post(`/calendar/events/for/${userId}`, data).then(r => r.data),
+  updateEvent: (id: string, data: any) => api.patch(`/calendar/events/${id}`, data).then(r => r.data),
+  deleteEvent: (id: string) => api.delete(`/calendar/events/${id}`).then(r => r.data),
+  members: () => api.get('/calendar/members').then(r => r.data),
+  listAway: () => api.get('/calendar/away').then(r => r.data),
+  addAway: (data: any) => api.post('/calendar/away', data).then(r => r.data),
+  deleteAway: (id: string) => api.delete(`/calendar/away/${id}`).then(r => r.data),
+};
+
+// Booking (публичные эндпоинты — без токена)
+export const bookingApi = {
+  getInfo: (slug: string) => api.get(`/booking/${slug}`).then(r => r.data),
+  getSlots: (slug: string, date: string) => api.get(`/booking/${slug}/slots`, { params: { date } }).then(r => r.data),
+  book: (slug: string, data: { guest_name: string; guest_email: string; starts_at: string; note?: string }) =>
+    api.post(`/booking/${slug}`, data).then(r => r.data),
+};

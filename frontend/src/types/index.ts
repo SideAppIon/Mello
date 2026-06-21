@@ -162,6 +162,96 @@ export interface HistoryEntry {
   created_at: string;
 }
 
+// --- Календарь ---
+
+export interface CalendarSettings {
+  user_id: string;
+  timezone: string;
+  work_days: number[]; // 0=Вс..6=Сб
+  work_start: string; // 'HH:MM'
+  work_end: string;
+  slot_minutes: number;
+  booking_slug: string | null;
+  booking_enabled: boolean;
+  default_meeting_url: string | null;
+}
+
+export interface EventAttendee {
+  id: string;
+  full_name: string;
+  avatar_color: string;
+}
+
+export interface CalendarEvent {
+  kind: 'event';
+  id: string;
+  owner_id: string;
+  owner_name: string;
+  title: string;
+  description: string | null;
+  starts_at: string; // UTC ISO
+  ends_at: string; // UTC ISO
+  meeting_url: string | null;
+  location: string | null;
+  source: 'internal' | 'booking';
+  created_by: string | null;
+  created_by_name: string | null;
+  guest_name: string | null;
+  guest_email: string | null;
+  status: 'confirmed' | 'cancelled';
+  attendees: EventAttendee[];
+}
+
+export interface CalendarTaskItem {
+  kind: 'task';
+  id: string;
+  title: string;
+  priority: Priority;
+  deadline: string; // UTC ISO
+  is_completed: boolean;
+  board_id: string;
+  project_id: string;
+  project_name: string;
+}
+
+export type CalendarItem = CalendarEvent | CalendarTaskItem;
+
+export interface AwayPeriod {
+  id: string;
+  user_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+}
+
+export interface CalendarMember {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_color: string;
+  timezone: string;
+}
+
+export interface BookingInfo {
+  full_name: string;
+  avatar_color: string;
+  timezone: string;
+  work_days: number[];
+  work_start: string;
+  work_end: string;
+  slot_minutes: number;
+}
+
+export interface BookingResult {
+  starts_at: string;
+  ends_at: string;
+  meeting_url: string | null;
+  owner_name: string;
+  owner_timezone: string;
+}
+
+export const WEEKDAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
 export const PRIORITY_LABELS: Record<Priority, string> = {
   1: 'Критический',
   2: 'Высокий',

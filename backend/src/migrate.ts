@@ -216,6 +216,65 @@ const statements: string[] = [
     CONSTRAINT fk_att_comment FOREIGN KEY (comment_id) REFERENCES task_comments(id) ON DELETE CASCADE,
     CONSTRAINT fk_att_user FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  // --- Календарь ---
+  // Все DATETIME в календарных таблицах хранятся в UTC. Конвертация в часовой
+  // пояс пользователя выполняется только на границах (route-слой / UI).
+  `CREATE TABLE IF NOT EXISTS calendar_settings (
+    user_id CHAR(36) NOT NULL PRIMARY KEY,
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Moscow',
+    work_days JSON NOT NULL,
+    work_start VARCHAR(5) NOT NULL DEFAULT '09:00',
+    work_end VARCHAR(5) NOT NULL DEFAULT '18:00',
+    slot_minutes INT NOT NULL DEFAULT 30,
+    booking_slug VARCHAR(64) NULL UNIQUE,
+    booking_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    default_meeting_url TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  `CREATE TABLE IF NOT EXISTS calendar_events (
+    id CHAR(36) NOT NULL PRIMARY KEY DEFAULT (UUID()),
+    owner_id CHAR(36) NOT NULL,
+    title VARCHAR(512) NOT NULL,
+    description TEXT NULL,
+    starts_at DATETIME NOT NULL,
+    ends_at DATETIME NOT NULL,
+    meeting_url TEXT NULL,
+    location VARCHAR(512) NULL,
+    source VARCHAR(16) NOT NULL DEFAULT 'internal',
+    created_by CHAR(36) NULL,
+    guest_name VARCHAR(255) NULL,
+    guest_email VARCHAR(255) NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'confirmed',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_cal_events_owner (owner_id, starts_at),
+    CONSTRAINT chk_cal_source CHECK (source IN ('internal','booking')),
+    CONSTRAINT chk_cal_status CHECK (status IN ('confirmed','cancelled')),
+    CONSTRAINT fk_cal_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cal_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  `CREATE TABLE IF NOT EXISTS calendar_event_attendees (
+    event_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    PRIMARY KEY (event_id, user_id),
+    CONSTRAINT fk_cea_event FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cea_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+  `CREATE TABLE IF NOT EXISTS calendar_away (
+    id CHAR(36) NOT NULL PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL,
+    starts_at DATETIME NOT NULL,
+    ends_at DATETIME NOT NULL,
+    reason VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_cal_away_user (user_id, starts_at),
+    CONSTRAINT fk_cal_away_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 // Коды ошибок MySQL, которые можно безопасно игнорировать при повторном запуске

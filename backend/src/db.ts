@@ -52,6 +52,10 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: Number(process.env.DB_POOL || 5),
   charset: 'utf8mb4',
+  // Соглашение проекта: все DATETIME хранятся в UTC. Фиксируем интерпретацию
+  // драйвером в UTC, иначе на машине разработчика (не-UTC локаль) mysql2 читает
+  // и пишет DATETIME со сдвигом — критично для календаря. На проде сервер уже UTC.
+  timezone: 'Z',
   // Возвращаем TINYINT(1) как boolean, чтобы JSON-ответы API совпадали с прежними
   // (PostgreSQL отдавал настоящие true/false).
   typeCast(field, next) {
